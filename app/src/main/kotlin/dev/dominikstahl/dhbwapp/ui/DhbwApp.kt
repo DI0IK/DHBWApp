@@ -18,7 +18,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -73,18 +72,10 @@ fun DhbwApp(httpClient: HttpClient, userPreferences: UserPreferences) {
                                 selected = currentRoute == item.screen.route,
                                  onClick = {
                                      if (currentRoute != item.screen.route) {
-                                         if (item.screen == Screen.More) {
-                                             navController.navigate(Screen.More.route) {
-                                                 popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                                 launchSingleTop = true
-                                             }
-                                         } else {
-                                             // For other navigation, use original logic
-                                             navController.navigate(item.screen.route) {
-                                                 popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                                 launchSingleTop = true
-                                                 restoreState = true
-                                             }
+                                         navController.navigate(item.screen.route) {
+                                             popUpTo(Screen.Dashboard.route) { saveState = true }
+                                             launchSingleTop = true
+                                             restoreState = true
                                          }
                                      }
                                  },
