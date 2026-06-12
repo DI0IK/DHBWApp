@@ -14,6 +14,6 @@ data class BottomNavItem(
 
 val bottomNavItems = listOf(
     BottomNavItem("Mensa", Icons.Default.Restaurant, Screen.Mensa),
-    BottomNavItem("Lectures", Icons.Default.School, Screen.Lectures),
-    BottomNavItem("More", Icons.Default.MoreHoriz, Screen.More),
+    BottomNavItem("Vorlesungen", Icons.Default.School, Screen.Lectures),
+    BottomNavItem("Mehr", Icons.Default.MoreHoriz, Screen.More),
 )

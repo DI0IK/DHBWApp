@@ -68,6 +68,16 @@ class DirectoryExtractorTest {
     }
 
     @Test
+    fun testParseMultipleLecturers() {
+        val input = "Stahl, Dominik, Maier, Joseph, Prof. Dr. Schmidt, Heinz"
+        val parsed = DirectoryExtractor.parseLecturerNames(input)
+        assertEquals(3, parsed.size)
+        assertEquals("Stahl, Dominik", parsed[0])
+        assertEquals("Maier, Joseph", parsed[1])
+        assertEquals("Prof. Dr. Schmidt, Heinz", parsed[2])
+    }
+
+    @Test
     fun testExtractRooms() {
         val result = DirectoryExtractor.extractRooms(sampleLectures)
         // 101, 102, 103. Duplicates and blanks removed, sorted

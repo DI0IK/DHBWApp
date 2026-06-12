@@ -62,20 +62,20 @@ fun SettingsScreen(
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text(
-            text = "Settings",
+            text = "Einstellungen",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "Select your DHBW location",
+            text = "Wähle deinen DHBW-Standort",
             style = MaterialTheme.typography.titleMedium,
         )
         Spacer(modifier = Modifier.height(8.dp))
 
         when {
             state.loading -> CircularProgressIndicator()
-            state.error != null -> Text("Error: ${state.error}", color = MaterialTheme.colorScheme.error)
+            state.error != null -> Text("Fehler: ${state.error}", color = MaterialTheme.colorScheme.error)
             else -> {
                 ExposedDropdownMenuBox(
                     expanded = siteExpanded,
@@ -85,7 +85,7 @@ fun SettingsScreen(
                         value = state.selectedSite ?: "",
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Location") },
+                        label = { Text("Standort") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = siteExpanded) },
                         modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
                     )
@@ -110,7 +110,7 @@ fun SettingsScreen(
                 if (state.selectedSite != null) {
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = "Select your course",
+                        text = "Wähle deinen Kurs",
                         style = MaterialTheme.typography.titleMedium,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -126,7 +126,7 @@ fun SettingsScreen(
                                 value = state.selectedCourse ?: "",
                                 onValueChange = {},
                                 readOnly = true,
-                                label = { Text("Course") },
+                                label = { Text("Kurs") },
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = courseExpanded) },
                                 modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
                             )

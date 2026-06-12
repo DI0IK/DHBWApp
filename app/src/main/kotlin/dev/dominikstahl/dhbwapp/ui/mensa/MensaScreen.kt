@@ -2,6 +2,8 @@ package dev.dominikstahl.dhbwapp.ui.mensa
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,13 +13,19 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.filled.Eco
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material3.Card
@@ -61,6 +69,55 @@ import java.util.Locale
 private val priceFormat = NumberFormat.getCurrencyInstance(Locale.GERMANY)
 private val dayFormat = DateTimeFormatter.ofPattern("EEEE, d. MMMM", Locale.GERMANY)
 
+
+@Composable
+private fun FilterChip(
+    selected: Boolean,
+    onClick: () -> Unit,
+    label: String,
+) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(
+                if (selected) MaterialTheme.colorScheme.primaryContainer 
+                else MaterialTheme.colorScheme.surfaceContainer
+            )
+            .clickable { onClick() }
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun FilterRow(
+    filterVeggie: Boolean,
+    onVeggieToggle: () -> Unit,
+    filterUnder5: Boolean,
+    onUnder5Toggle: () -> Unit,
+    filterLowCo2: Boolean,
+    onLowCo2Toggle: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        FilterChip(selected = filterVeggie, onClick = onVeggieToggle, label = "🌱 Vegetarisch")
+        FilterChip(selected = filterUnder5, onClick = onUnder5Toggle, label = "💰 Unter 5€")
+        FilterChip(selected = filterLowCo2, onClick = onLowCo2Toggle, label = "🟢 Low CO₂")
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MensaScreen(
@@ -81,8 +138,12 @@ fun MensaScreen(
     val selectedDay = days.getOrNull(state.selectedDayIndex)
     val mensaName = firstResponse?.mensaInfo?.name ?: ""
 
-    var selectedItem by remember { mutableStateOf<MenuItem?>(null) }
+    var selectedItem by remember { mutableStateOf<MergedMenuItem?>(null) }
     val sheetState = rememberModalBottomSheetState()
+
+    var filterVeggie by remember { mutableStateOf(false) }
+    var filterUnder5 by remember { mutableStateOf(false) }
+    var filterLowCo2 by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         when {
@@ -120,10 +181,23 @@ fun MensaScreen(
                             hasNext = state.selectedDayIndex < days.lastIndex,
                         )
                     }
+                    item(key = "filters") {
+                        FilterRow(
+                            filterVeggie = filterVeggie,
+                            onVeggieToggle = { filterVeggie = !filterVeggie },
+                            filterUnder5 = filterUnder5,
+                            onUnder5Toggle = { filterUnder5 = !filterUnder5 },
+                            filterLowCo2 = filterLowCo2,
+                            onLowCo2Toggle = { filterLowCo2 = !filterLowCo2 }
+                        )
+                    }
                     if (selectedDay != null) {
                         item(key = "content_${selectedDay.id}") {
                             DayContent(
                                 day = selectedDay,
+                                filterVeggie = filterVeggie,
+                                filterUnder5 = filterUnder5,
+                                filterLowCo2 = filterLowCo2,
                                 onItemClick = { selectedItem = it }
                             )
                         }
@@ -137,7 +211,7 @@ fun MensaScreen(
                 onDismissRequest = { selectedItem = null },
                 sheetState = sheetState,
             ) {
-                DishDetailSheetContent(item = selectedItem!!)
+                DishDetailSheetContent(mergedItem = selectedItem!!)
             }
         }
     }
@@ -166,8 +240,12 @@ private fun DateSelector(
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TextButton(onClick = onPrevious, enabled = hasPrevious) {
-            Text("<", fontWeight = FontWeight.Bold)
+        IconButton(onClick = onPrevious, enabled = hasPrevious) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                contentDescription = "Vorheriger Tag",
+                tint = if (hasPrevious) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+            )
         }
         Spacer(modifier = Modifier.width(16.dp))
         Text(
@@ -175,10 +253,15 @@ private fun DateSelector(
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center,
+            modifier = Modifier.weight(1f)
         )
         Spacer(modifier = Modifier.width(16.dp))
-        TextButton(onClick = onNext, enabled = hasNext) {
-            Text(">", fontWeight = FontWeight.Bold)
+        IconButton(onClick = onNext, enabled = hasNext) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = "Nächster Tag",
+                tint = if (hasNext) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+            )
         }
     }
 }
@@ -186,7 +269,10 @@ private fun DateSelector(
 @Composable
 private fun DayContent(
     day: MenuDay,
-    onItemClick: (MenuItem) -> Unit,
+    filterVeggie: Boolean,
+    filterUnder5: Boolean,
+    filterLowCo2: Boolean,
+    onItemClick: (MergedMenuItem) -> Unit,
 ) {
     Column(modifier = Modifier.padding(horizontal = 16.dp)) {
         HorizontalDivider()
@@ -199,34 +285,43 @@ private fun DayContent(
             )
         } else {
             day.starters.orEmpty().let { items ->
-                if (items.isNotEmpty()) {
+                val grouped = groupMenuItems(items)
+                    .filter { it.matchesFilters(filterVeggie, filterUnder5, filterLowCo2) }
+                    .map { it.filterVariants(filterVeggie, filterUnder5, filterLowCo2) }
+                if (grouped.isNotEmpty()) {
                     CategoryLabel("Vorspeisen")
-                    items.forEach { item ->
-                        MenuItemRow(
-                            item = item,
-                            onClick = { onItemClick(item) }
+                    grouped.forEach { mergedItem ->
+                        MenuItemCard(
+                            mergedItem = mergedItem,
+                            onClick = { onItemClick(mergedItem) }
                         )
                     }
                 }
             }
             day.mainCourses.orEmpty().let { items ->
-                if (items.isNotEmpty()) {
+                val grouped = groupMenuItems(items)
+                    .filter { it.matchesFilters(filterVeggie, filterUnder5, filterLowCo2) }
+                    .map { it.filterVariants(filterVeggie, filterUnder5, filterLowCo2) }
+                if (grouped.isNotEmpty()) {
                     CategoryLabel("Hauptgerichte")
-                    items.forEach { item ->
-                        MenuItemRow(
-                            item = item,
-                            onClick = { onItemClick(item) }
+                    grouped.forEach { mergedItem ->
+                        MenuItemCard(
+                            mergedItem = mergedItem,
+                            onClick = { onItemClick(mergedItem) }
                         )
                     }
                 }
             }
             day.desserts.orEmpty().let { items ->
-                if (items.isNotEmpty()) {
+                val grouped = groupMenuItems(items)
+                    .filter { it.matchesFilters(filterVeggie, filterUnder5, filterLowCo2) }
+                    .map { it.filterVariants(filterVeggie, filterUnder5, filterLowCo2) }
+                if (grouped.isNotEmpty()) {
                     CategoryLabel("Desserts")
-                    items.forEach { item ->
-                        MenuItemRow(
-                            item = item,
-                            onClick = { onItemClick(item) }
+                    grouped.forEach { mergedItem ->
+                        MenuItemCard(
+                            mergedItem = mergedItem,
+                            onClick = { onItemClick(mergedItem) }
                         )
                     }
                 }
@@ -248,41 +343,161 @@ private fun CategoryLabel(name: String) {
 }
 
 @Composable
-private fun MenuItemRow(
-    item: MenuItem,
+private fun MenuItemCard(
+    mergedItem: MergedMenuItem,
     onClick: () -> Unit,
 ) {
-    val (cleanedName, _) = remember(item.name) { extractAllergensAndCleanName(item.name) }
+    val baseItem = mergedItem.baseItem
+    val (cleanedName, _) = remember(baseItem.name) { extractAllergensAndCleanName(baseItem.name) }
+    
+    val diet = getDishDiet(baseItem)
+    val (accentColor, bgColor, labelText) = getDietColors(diet)
+    val co2Val = baseItem.co2Portion
 
-    Surface(
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
+            .padding(vertical = 6.dp)
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        tonalElevation = 1.dp,
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+                .height(IntrinsicSize.Min),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = cleanedName,
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.weight(1f),
+            Box(
+                modifier = Modifier
+                    .width(5.dp)
+                    .fillMaxHeight()
+                    .background(accentColor)
             )
-            Spacer(modifier = Modifier.width(16.dp))
-            item.priceStudent?.let { price ->
-                Text(
-                    text = priceFormat.format(price),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold,
-                )
+
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (!baseItem.image.isNullOrBlank()) {
+                        AsyncImage(
+                            model = baseItem.image,
+                            contentDescription = cleanedName,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Restaurant,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = labelText,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = accentColor,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .background(bgColor, RoundedCornerShape(6.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                        if (co2Val != null) {
+                            val co2Text = when {
+                                co2Val < 200 -> "🟢 Low CO₂"
+                                co2Val < 600 -> "🟡 Mid CO₂"
+                                else -> "🔴 High CO₂"
+                            }
+                            Text(
+                                text = co2Text,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier
+                                    .background(
+                                        MaterialTheme.colorScheme.surfaceVariant,
+                                        RoundedCornerShape(6.dp)
+                                    )
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = cleanedName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    if (mergedItem.variants.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            mergedItem.variants.forEach { variant ->
+                                val (varCleanedName, _) = remember(variant.name) { extractAllergensAndCleanName(variant.name) }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "• $varCleanedName",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    variant.priceStudent?.let { vPrice ->
+                                        Text(
+                                            text = priceFormat.format(vPrice),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                baseItem.priceStudent?.let { price ->
+                    Text(
+                        text = priceFormat.format(price),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
             }
         }
     }
@@ -290,7 +505,8 @@ private fun MenuItemRow(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun DishDetailSheetContent(item: MenuItem) {
+private fun DishDetailSheetContent(mergedItem: MergedMenuItem) {
+    val item = mergedItem.baseItem
     val (cleanedName, extractedAllergens) = remember(item.name) { extractAllergensAndCleanName(item.name) }
     
     val (apiAllergens, apiAdditives) = remember(item.allergens, item.additives) {
@@ -318,8 +534,8 @@ private fun DishDetailSheetContent(item: MenuItem) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp, vertical = 16.dp)
+            .verticalScroll(rememberScrollState())
     ) {
-        // Hero Graphic / Image Placeholder
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -354,18 +570,20 @@ private fun DishDetailSheetContent(item: MenuItem) {
                 )
             }
             
-            // Type Badge
+            val diet = getDishDiet(item)
+            val (textColor, bgColor, _) = getDietColors(diet)
             Surface(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(12.dp),
                 shape = RoundedCornerShape(8.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.85f)
+                color = bgColor.copy(alpha = 0.9f)
             ) {
                 Text(
                     text = item.type,
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
+                    color = textColor,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                 )
             }
@@ -373,7 +591,6 @@ private fun DishDetailSheetContent(item: MenuItem) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Dish Name
         Text(
             text = cleanedName,
             style = MaterialTheme.typography.headlineSmall,
@@ -383,9 +600,8 @@ private fun DishDetailSheetContent(item: MenuItem) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Price Grid
         Text(
-            text = "Preise",
+            text = "Basispreis",
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary
@@ -400,9 +616,71 @@ private fun DishDetailSheetContent(item: MenuItem) {
             PriceCard("Gast", item.priceGuest, Modifier.weight(1f))
         }
 
+        if (mergedItem.variants.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "Varianten & Optionen",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        color = MaterialTheme.colorScheme.surfaceContainer,
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                mergedItem.variants.forEach { variant ->
+                    val (varCleanedName, _) = remember(variant.name) { extractAllergensAndCleanName(variant.name) }
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = varCleanedName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            variant.priceStudent?.let { vs ->
+                                Text(
+                                    text = "Stud.: ${priceFormat.format(vs)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                            variant.priceEmployee?.let { ve ->
+                                Text(
+                                    text = "Mitarb.: ${priceFormat.format(ve)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            variant.priceGuest?.let { vg ->
+                                Text(
+                                    text = "Gast: ${priceFormat.format(vg)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Sustainability Metric
         sustainabilityInfo?.let { (sustainabilityLabel, co2Value) ->
             Row(
                 modifier = Modifier
@@ -438,7 +716,6 @@ private fun DishDetailSheetContent(item: MenuItem) {
             Spacer(modifier = Modifier.height(16.dp))
         }
 
-        // Allergens Section
         Text(
             text = "Allergene",
             style = MaterialTheme.typography.titleSmall,
@@ -468,7 +745,6 @@ private fun DishDetailSheetContent(item: MenuItem) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Additives Section
         Text(
             text = "Zusatzstoffe",
             style = MaterialTheme.typography.titleSmall,
@@ -495,6 +771,14 @@ private fun DishDetailSheetContent(item: MenuItem) {
                 }
             }
         }
+        Spacer(modifier = Modifier.height(24.dp))
+        Text(
+            text = "Hinweis: Die Ernährungsform-Kategorisierung (🌱/🥛/🍖) basiert auf einer automatischen Heuristik und kann fehlerhaft sein. Bitte prüfen Sie vor dem Verzehr die offiziellen Deklarationen vor Ort.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
+        )
         Spacer(modifier = Modifier.height(24.dp))
     }
 }
@@ -529,103 +813,7 @@ private fun PriceCard(label: String, price: Double?, modifier: Modifier = Modifi
     }
 }
 
-private fun parseAllergensAndAdditives(
-    itemAllergens: List<String>?,
-    itemAdditives: List<String>?
-): Pair<List<String>, List<String>> {
-    val rawAllergens = (itemAllergens.orEmpty() + itemAdditives.orEmpty())
-        .filter { it.isNotBlank() }
-        .distinct()
 
-    val allergensList = mutableListOf<String>()
-    val additivesList = mutableListOf<String>()
-
-    rawAllergens.forEach { code ->
-        val cleaned = code.trim().lowercase()
-        if (cleaned.toIntOrNull() != null) {
-            val name = when (cleaned) {
-                "1" -> "Farbstoff"
-                "2" -> "Konservierungsstoffe"
-                "3" -> "Antioxidationsmittel"
-                "4" -> "Geschmacksverstärker"
-                "5" -> "Geschwefelt"
-                "6" -> "Geschwärzt"
-                "7" -> "Gewachst"
-                "8" -> "Phosphat"
-                "9" -> "Süßungsmittel"
-                "10" -> "Phenylalaninquelle"
-                "12" -> "Unter Schutzatmosphäre verpackt"
-                else -> "Zusatzstoff $code"
-            }
-            additivesList.add(name)
-        } else {
-            val name = when (cleaned) {
-                "we", "gl", "a" -> "Gluten/Weizen"
-                "mi", "la", "ml", "g" -> "Milch/Laktose"
-                "ei", "c" -> "Ei"
-                "so", "f" -> "Soja"
-                "se", "l" -> "Sellerie"
-                "sf", "m" -> "Senf"
-                "sn", "sa", "i" -> "Sesam"
-                "fi", "d" -> "Fisch"
-                "kr", "b" -> "Krebstiere"
-                "er", "e" -> "Erdnüsse"
-                "nu", "h" -> "Nüsse"
-                "su", "o" -> "Schwefeldioxid"
-                "lu", "p" -> "Lupinen"
-                "wt", "n" -> "Weichtiere"
-                "lab" -> "Lab"
-                "di" -> "Dinkel"
-                else -> null
-            }
-            if (name != null) {
-                allergensList.add(name)
-            } else {
-                if (code.length > 2 && code.all { it.isUpperCase() }) {
-                    additivesList.add(code)
-                } else {
-                    allergensList.add(code)
-                }
-            }
-        }
-    }
-
-    return Pair(allergensList.distinct().sorted(), additivesList.distinct().sorted())
-}
-
-private fun extractAllergensAndCleanName(fullName: String): Pair<String, List<String>> {
-    val regex = Regex("\\(([^)]+)\\)\\s*$")
-    val matchResult = regex.find(fullName)
-
-    if (matchResult != null) {
-        val codesString = matchResult.groupValues[1]
-        val cleanName = fullName.replace(regex, "").trim()
-        val codes = codesString.split(",").map { it.trim() }
-
-        val translated = codes.map { code ->
-            when (code.lowercase()) {
-                "gl", "we", "a" -> "Gluten"
-                "la", "mi", "g" -> "Milch/Laktose"
-                "ei", "c" -> "Ei"
-                "so", "f" -> "Soja"
-                "se", "l" -> "Sellerie"
-                "sf", "m" -> "Senf"
-                "nu", "h" -> "Nüsse"
-                "fi", "d" -> "Fisch"
-                "kr", "b" -> "Krebstiere"
-                "er", "e" -> "Erdnüsse"
-                "sa", "i" -> "Sesam"
-                "su", "o" -> "Schwefeldioxid"
-                "lu", "p" -> "Lupinen"
-                "we", "n" -> "Weichtiere"
-                else -> code
-            }
-        }
-        return Pair(cleanName, translated)
-    }
-
-    return Pair(fullName, emptyList())
-}
 
 
 private fun formatDate(dateString: String): String {

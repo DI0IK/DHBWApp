@@ -14,7 +14,7 @@ import java.time.LocalDate
 
 data class EntityTimetableUiState(
     val lectures: List<RaplaLectureEvent> = emptyList(),
-    val selectedDayIndex: Int = 0,
+    val selectedWeekIndex: Int = 0,
     val loading: Boolean = false,
     val error: String? = null,
 )
@@ -30,7 +30,7 @@ class EntityTimetableViewModel(
     val uiState: StateFlow<EntityTimetableUiState> = _uiState.asStateFlow()
 
     private var currentFilteredLectures: List<RaplaLectureEvent> = emptyList()
-    var lectureDays: List<LocalDate> = emptyList()
+    var lectureWeeks: List<LocalDate> = emptyList()
 
     init {
         loadLectures()
@@ -45,22 +45,23 @@ class EntityTimetableViewModel(
                 // Filter based on entity type
                 currentFilteredLectures = all.filter { lecture ->
                     when (type) {
-                        "lecturer" -> lecture.lecturer == name
+                        "lecturer" -> DirectoryExtractor.parseLecturerNames(lecture.lecturer).contains(name)
                         "room" -> lecture.rooms.contains(name)
                         "course" -> lecture.course == name
                         else -> false
                     }
                 }
 
-                lectureDays = currentFilteredLectures
+                val days = currentFilteredLectures
                     .mapNotNull { LecturesViewModel.apiDateToLocalDate(it.date) }
                     .distinct()
-                    .sorted()
+                
+                lectureWeeks = days.map { LecturesViewModel.getMonday(it) }.distinct().sorted()
 
-                val todayIndex = findTodayIndex(lectureDays)
+                val todayWeekIndex = findTodayWeekIndex(lectureWeeks)
                 _uiState.value = EntityTimetableUiState(
                     lectures = currentFilteredLectures,
-                    selectedDayIndex = todayIndex
+                    selectedWeekIndex = todayWeekIndex
                 )
             } catch (e: Exception) {
                 _uiState.value = EntityTimetableUiState(
@@ -70,30 +71,41 @@ class EntityTimetableViewModel(
         }
     }
 
-    fun previousDay() {
-        val i = _uiState.value.selectedDayIndex
+    fun previousWeek() {
+        val i = _uiState.value.selectedWeekIndex
         if (i > 0) {
-            _uiState.value = _uiState.value.copy(selectedDayIndex = i - 1)
+            _uiState.value = _uiState.value.copy(selectedWeekIndex = i - 1)
         }
     }
 
-    fun nextDay() {
-        val i = _uiState.value.selectedDayIndex
-        if (i < lectureDays.lastIndex) {
-            _uiState.value = _uiState.value.copy(selectedDayIndex = i + 1)
+    fun nextWeek() {
+        val i = _uiState.value.selectedWeekIndex
+        if (i < lectureWeeks.lastIndex) {
+            _uiState.value = _uiState.value.copy(selectedWeekIndex = i + 1)
         }
     }
 
-    fun lecturesForDay(localDate: LocalDate): List<RaplaLectureEvent> {
-        return currentFilteredLectures.filter { LecturesViewModel.apiDateToLocalDate(it.date) == localDate }
-            .sortedBy { it.startTime }
+    fun lecturesForWeek(monday: LocalDate): Map<LocalDate, List<RaplaLectureEvent>> {
+        val sunday = monday.plusDays(6)
+        return currentFilteredLectures
+            .filter { 
+                val date = LecturesViewModel.apiDateToLocalDate(it.date)
+                date != null && !date.isBefore(monday) && !date.isAfter(sunday)
+            }
+            .groupBy { LecturesViewModel.apiDateToLocalDate(it.date)!! }
+            .mapValues { (_, list) -> list.sortedBy { it.startTime } }
+            .toSortedMap()
     }
 
-    private fun findTodayIndex(days: List<LocalDate>): Int {
-        if (days.isEmpty()) return 0
-        val today = LocalDate.now()
-        val index = days.indexOfFirst { it == today }
-        return if (index >= 0) index else 0
+    private fun findTodayWeekIndex(weeks: List<LocalDate>): Int {
+        if (weeks.isEmpty()) return 0
+        val todayMonday = LecturesViewModel.getMonday(LocalDate.now())
+        val index = weeks.indexOf(todayMonday)
+        if (index >= 0) return index
+        
+        // Find closest week
+        val closestIndex = weeks.indexOfFirst { !it.isBefore(todayMonday) }
+        return if (closestIndex >= 0) closestIndex else weeks.lastIndex
     }
 
     class Factory(

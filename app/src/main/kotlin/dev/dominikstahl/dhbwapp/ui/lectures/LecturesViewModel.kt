@@ -11,10 +11,12 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneId
+import java.time.temporal.TemporalAdjusters
+import java.time.DayOfWeek
 
 data class LecturesUiState(
     val lectures: List<RaplaLectureEvent> = emptyList(),
-    val selectedDayIndex: Int = 0,
+    val selectedWeekIndex: Int = 0,
     val loading: Boolean = false,
     val error: String? = null,
 )
@@ -29,7 +31,7 @@ class LecturesViewModel(
 
     private var currentLectures: List<RaplaLectureEvent> = emptyList()
 
-    var lectureDays: List<LocalDate> = emptyList()
+    var lectureWeeks: List<LocalDate> = emptyList()
 
     fun setCourse(newCourse: String) {
         course = newCourse
@@ -43,9 +45,12 @@ class LecturesViewModel(
             try {
                 val all = apiClient.getLecturesForCourse(course, archived = false)
                 currentLectures = all
-                lectureDays = all.mapNotNull { apiDateToLocalDate(it.date) }.distinct().sorted()
-                val todayIndex = findTodayIndex(lectureDays)
-                _uiState.value = LecturesUiState(lectures = all, selectedDayIndex = todayIndex)
+                
+                val days = all.mapNotNull { apiDateToLocalDate(it.date) }.distinct()
+                lectureWeeks = days.map { getMonday(it) }.distinct().sorted()
+                
+                val todayWeekIndex = findTodayWeekIndex(lectureWeeks)
+                _uiState.value = LecturesUiState(lectures = all, selectedWeekIndex = todayWeekIndex)
             } catch (e: Exception) {
                 _uiState.value = LecturesUiState(
                     error = e.message ?: "Fehler beim Laden der Vorlesungen",
@@ -54,33 +59,49 @@ class LecturesViewModel(
         }
     }
 
-    fun previousDay() {
-        val i = _uiState.value.selectedDayIndex
+    fun previousWeek() {
+        val i = _uiState.value.selectedWeekIndex
         if (i > 0) {
-            _uiState.value = _uiState.value.copy(selectedDayIndex = i - 1)
+            _uiState.value = _uiState.value.copy(selectedWeekIndex = i - 1)
         }
     }
 
-    fun nextDay() {
-        val i = _uiState.value.selectedDayIndex
-        if (i < lectureDays.lastIndex) {
-            _uiState.value = _uiState.value.copy(selectedDayIndex = i + 1)
+    fun nextWeek() {
+        val i = _uiState.value.selectedWeekIndex
+        if (i < lectureWeeks.lastIndex) {
+            _uiState.value = _uiState.value.copy(selectedWeekIndex = i + 1)
         }
     }
 
-    fun lecturesForDay(localDate: LocalDate): List<RaplaLectureEvent> {
-        return currentLectures.filter { apiDateToLocalDate(it.date) == localDate }
-            .sortedBy { it.startTime }
+    fun lecturesForWeek(monday: LocalDate): Map<LocalDate, List<RaplaLectureEvent>> {
+        val sunday = monday.plusDays(6)
+        return currentLectures
+            .filter { 
+                val date = apiDateToLocalDate(it.date)
+                date != null && !date.isBefore(monday) && !date.isAfter(sunday)
+            }
+            .groupBy { apiDateToLocalDate(it.date)!! }
+            .mapValues { (_, list) -> list.sortedBy { it.startTime } }
+            .toSortedMap()
     }
 
-    private fun findTodayIndex(days: List<LocalDate>): Int {
-        if (days.isEmpty()) return 0
-        val today = LocalDate.now()
-        return days.indexOfFirst { it == today }.coerceAtLeast(0)
+    private fun findTodayWeekIndex(weeks: List<LocalDate>): Int {
+        if (weeks.isEmpty()) return 0
+        val todayMonday = getMonday(LocalDate.now())
+        val index = weeks.indexOf(todayMonday)
+        if (index >= 0) return index
+        
+        // Find closest week
+        val closestIndex = weeks.indexOfFirst { !it.isBefore(todayMonday) }
+        return if (closestIndex >= 0) closestIndex else weeks.lastIndex
     }
 
     companion object {
         private val berlinZone = ZoneId.of("Europe/Berlin")
+
+        fun getMonday(date: LocalDate): LocalDate {
+            return date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+        }
 
         fun apiDateToLocalDate(dateString: String): LocalDate? {
             return try {

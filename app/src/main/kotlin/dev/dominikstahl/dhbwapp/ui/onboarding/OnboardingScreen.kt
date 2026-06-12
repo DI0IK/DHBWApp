@@ -53,14 +53,14 @@ fun OnboardingScreen(
     ) {
         Spacer(modifier = Modifier.height(48.dp))
         Text(
-            text = "Welcome to DHBW App",
+            text = "Willkommen zur DHBW App",
             style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "Select your DHBW location and course to get started",
+            text = "Wähle deinen DHBW-Standort und Kurs aus, um zu starten",
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center,
         )
@@ -68,7 +68,7 @@ fun OnboardingScreen(
 
         when {
             state.loading -> CircularProgressIndicator()
-            state.error != null -> Text("Error: ${state.error}", color = MaterialTheme.colorScheme.error)
+            state.error != null -> Text("Fehler: ${state.error}", color = MaterialTheme.colorScheme.error)
             else -> {
                 ExposedDropdownMenuBox(
                     expanded = siteExpanded,
@@ -78,8 +78,8 @@ fun OnboardingScreen(
                         value = state.selectedSite ?: "",
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Location") },
-                        placeholder = { Text("Select a location") },
+                        label = { Text("Standort") },
+                        placeholder = { Text("Wähle einen Standort") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = siteExpanded) },
                         modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
                     )
@@ -114,8 +114,8 @@ fun OnboardingScreen(
                                 value = state.selectedCourse ?: "",
                                 onValueChange = {},
                                 readOnly = true,
-                                label = { Text("Course") },
-                                placeholder = { Text("Select a course") },
+                                label = { Text("Kurs") },
+                                placeholder = { Text("Wähle einen Kurs") },
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = courseExpanded) },
                                 modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
                             )
@@ -146,7 +146,7 @@ fun OnboardingScreen(
                     },
                     enabled = state.selectedSite != null && state.selectedCourse != null,
                 ) {
-                    Text("Continue", style = MaterialTheme.typography.titleMedium)
+                    Text("Weiter", style = MaterialTheme.typography.titleMedium)
                 }
             }
         }

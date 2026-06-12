@@ -13,12 +13,15 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
+import dev.dominikstahl.dhbwapp.remote.models.RoomOccupancy
+
 @Immutable
 data class StableRoom(
     val name: String,
     val isFree: Boolean,
     val occupancyLine1: String? = null,
-    val occupancyLine2: String? = null
+    val occupancyLine2: String? = null,
+    val occupancies: List<RoomOccupancy> = emptyList()
 )
 
 data class RoomsUiState(
@@ -56,7 +59,8 @@ class RoomAvailabilityViewModel(
                         name = room.name,
                         isFree = isFree,
                         occupancyLine1 = occupancyLines.getOrNull(0),
-                        occupancyLine2 = occupancyLines.getOrNull(1)
+                        occupancyLine2 = occupancyLines.getOrNull(1),
+                        occupancies = room.occupancies ?: emptyList()
                     )
                 }
                 val total = stableRooms.size
