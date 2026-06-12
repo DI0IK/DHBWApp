@@ -37,8 +37,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import dev.dominikstahl.dhbwapp.data.remote.ApiClient
-import dev.dominikstahl.dhbwapp.remote.models.RaplaLectureEvent
+import dev.dominikstahl.dhbwapp.data.repository.CalendarRepository
+import dev.dominikstahl.dhbwapp.data.model.EnrichedLectureEvent
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -56,14 +56,14 @@ private fun formatTime(time: String): String {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EntityTimetableScreen(
-    apiClient: ApiClient,
+    calendarRepository: CalendarRepository,
     site: String,
     type: String,
     name: String,
     onBackClick: () -> Unit,
 ) {
     val viewModel: EntityTimetableViewModel = viewModel(
-        factory = EntityTimetableViewModel.Factory(apiClient, site, type, name)
+        factory = EntityTimetableViewModel.Factory(calendarRepository, site, type, name)
     )
     val state by viewModel.uiState.collectAsState()
     val selectedDate = viewModel.lectureDays.getOrNull(state.selectedDayIndex)
@@ -128,8 +128,8 @@ fun EntityTimetableScreen(
                                 )
                             }
                         } else {
-                            items(dayLectures.size, key = { i -> dayLectures[i].id }) { i ->
-                                LectureCard(lecture = dayLectures[i])
+                            items(dayLectures.size, key = { i -> dayLectures[i].lecture.id }) { i ->
+                                LectureCard(enriched = dayLectures[i])
                             }
                         }
                     } else {
@@ -179,7 +179,8 @@ private fun DateSelector(
 }
 
 @Composable
-private fun LectureCard(lecture: RaplaLectureEvent) {
+private fun LectureCard(enriched: EnrichedLectureEvent) {
+    val lecture = enriched.lecture
     var expanded by remember { mutableStateOf(false) }
 
     Surface(
@@ -232,6 +233,11 @@ private fun LectureCard(lecture: RaplaLectureEvent) {
                         DetailRow("Dozent", lecture.lecturer ?: "-")
                         DetailRow("Räume", lecture.rooms.joinToString(", "))
                         DetailRow("Kurs", lecture.course)
+                        
+                        enriched.enrichments["rapla_details"]?.let { raplaInfo ->
+                            Spacer(modifier = Modifier.height(6.dp))
+                            DetailRow("Info", "ℹ️ $raplaInfo")
+                        }
                     }
                 }
             }

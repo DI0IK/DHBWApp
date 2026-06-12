@@ -3,8 +3,8 @@ package dev.dominikstahl.dhbwapp.ui.directory
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import dev.dominikstahl.dhbwapp.data.remote.ApiClient
-import dev.dominikstahl.dhbwapp.remote.models.RaplaLectureEvent
+import dev.dominikstahl.dhbwapp.data.model.EnrichedLectureEvent
+import dev.dominikstahl.dhbwapp.data.repository.CalendarRepository
 import dev.dominikstahl.dhbwapp.ui.lectures.LecturesViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -13,14 +13,14 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 data class EntityTimetableUiState(
-    val lectures: List<RaplaLectureEvent> = emptyList(),
+    val lectures: List<EnrichedLectureEvent> = emptyList(),
     val selectedDayIndex: Int = 0,
     val loading: Boolean = false,
     val error: String? = null,
 )
 
 class EntityTimetableViewModel(
-    private val apiClient: ApiClient,
+    private val calendarRepository: CalendarRepository,
     private val site: String,
     private val type: String,
     private val name: String,
@@ -29,7 +29,7 @@ class EntityTimetableViewModel(
     private val _uiState = MutableStateFlow(EntityTimetableUiState())
     val uiState: StateFlow<EntityTimetableUiState> = _uiState.asStateFlow()
 
-    private var currentFilteredLectures: List<RaplaLectureEvent> = emptyList()
+    private var currentFilteredLectures: List<EnrichedLectureEvent> = emptyList()
     var lectureDays: List<LocalDate> = emptyList()
 
     init {
@@ -40,10 +40,11 @@ class EntityTimetableViewModel(
         viewModelScope.launch {
             _uiState.value = EntityTimetableUiState(loading = true)
             try {
-                val all = apiClient.getLectures(site)
+                val all = calendarRepository.getLectures(site)
                 
                 // Filter based on entity type
-                currentFilteredLectures = all.filter { lecture ->
+                currentFilteredLectures = all.filter { enriched ->
+                    val lecture = enriched.lecture
                     when (type) {
                         "lecturer" -> lecture.lecturer == name
                         "room" -> lecture.rooms.contains(name)
@@ -53,7 +54,7 @@ class EntityTimetableViewModel(
                 }
 
                 lectureDays = currentFilteredLectures
-                    .mapNotNull { LecturesViewModel.apiDateToLocalDate(it.date) }
+                    .mapNotNull { LecturesViewModel.apiDateToLocalDate(it.lecture.date) }
                     .distinct()
                     .sorted()
 
@@ -84,9 +85,9 @@ class EntityTimetableViewModel(
         }
     }
 
-    fun lecturesForDay(localDate: LocalDate): List<RaplaLectureEvent> {
-        return currentFilteredLectures.filter { LecturesViewModel.apiDateToLocalDate(it.date) == localDate }
-            .sortedBy { it.startTime }
+    fun lecturesForDay(localDate: LocalDate): List<EnrichedLectureEvent> {
+        return currentFilteredLectures.filter { LecturesViewModel.apiDateToLocalDate(it.lecture.date) == localDate }
+            .sortedBy { it.lecture.startTime }
     }
 
     private fun findTodayIndex(days: List<LocalDate>): Int {
@@ -97,14 +98,14 @@ class EntityTimetableViewModel(
     }
 
     class Factory(
-        private val apiClient: ApiClient,
+        private val calendarRepository: CalendarRepository,
         private val site: String,
         private val type: String,
         private val name: String,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return EntityTimetableViewModel(apiClient, site, type, name) as T
+            return EntityTimetableViewModel(calendarRepository, site, type, name) as T
         }
     }
 }

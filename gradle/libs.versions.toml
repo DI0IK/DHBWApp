@@ -8,6 +8,7 @@ appcompat = "1.7.1"
 material = "1.14.0"
 kotlin = "2.0.0"
 fabrikt = "1.35.0"
+jsoup = "1.18.1"
 
 ktor = "2.3.11"
 kotlinxSerializationJson = "1.6.3"
@@ -29,6 +30,7 @@ ktor-client-android = { group = "io.ktor", name = "ktor-client-android", version
 ktor-client-content-negotiation = { group = "io.ktor", name = "ktor-client-content-negotiation", version.ref = "ktor" }
 ktor-serialization-kotlinx-json = { group = "io.ktor", name = "ktor-serialization-kotlinx-json", version.ref = "ktor" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
+jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
 compose-ui = { group = "androidx.compose.ui", name = "ui" }
 compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }

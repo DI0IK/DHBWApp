@@ -32,8 +32,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import dev.dominikstahl.dhbwapp.data.remote.ApiClient
-import dev.dominikstahl.dhbwapp.remote.models.RaplaLectureEvent
+import dev.dominikstahl.dhbwapp.data.repository.CalendarRepository
+import dev.dominikstahl.dhbwapp.data.model.EnrichedLectureEvent
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.OffsetDateTime
@@ -52,11 +52,11 @@ private fun formatTime(time: String): String {
 
 @Composable
 fun LecturesScreen(
-    apiClient: ApiClient,
+    calendarRepository: CalendarRepository,
     course: String,
 ) {
     val viewModel: LecturesViewModel = viewModel(
-        factory = LecturesViewModel.Factory(apiClient, course),
+        factory = LecturesViewModel.Factory(calendarRepository, course),
     )
     LaunchedEffect(course) {
         viewModel.setCourse(course)
@@ -132,8 +132,8 @@ fun LecturesScreen(
                             )
                         }
                     } else {
-                        items(dayLectures.size, key = { i -> dayLectures[i].id }) { i ->
-                            LectureCard(lecture = dayLectures[i])
+                        items(dayLectures.size, key = { i -> dayLectures[i].lecture.id }) { i ->
+                            LectureCard(enriched = dayLectures[i])
                         }
                     }
                 }
@@ -183,7 +183,8 @@ private fun DateSelector(
 }
 
 @Composable
-private fun LectureCard(lecture: RaplaLectureEvent) {
+private fun LectureCard(enriched: EnrichedLectureEvent) {
+    val lecture = enriched.lecture
     var expanded by remember { mutableStateOf(false) }
 
     Surface(
@@ -236,6 +237,11 @@ private fun LectureCard(lecture: RaplaLectureEvent) {
                         DetailRow("Dozent", lecture.lecturer ?: "-")
                         DetailRow("Räume", lecture.rooms.joinToString(", "))
                         DetailRow("Kurs", lecture.course)
+                        
+                        enriched.enrichments["rapla_details"]?.let { raplaInfo ->
+                            Spacer(modifier = Modifier.height(6.dp))
+                            DetailRow("Info", "ℹ️ $raplaInfo")
+                        }
                     }
                 }
             }

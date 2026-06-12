@@ -43,6 +43,14 @@ fun DhbwApp(httpClient: HttpClient, userPreferences: UserPreferences) {
     val currentRoute = navBackStackEntry?.destination?.route
 
     val apiClient = remember { ApiClient(httpClient) }
+    val calendarRepository = remember {
+        dev.dominikstahl.dhbwapp.data.repository.CalendarRepository(
+            apiClient = apiClient,
+            enrichers = listOf(
+                dev.dominikstahl.dhbwapp.data.repository.RaplaScraperCalendarEnricher(httpClient)
+            )
+        )
+    }
     val scope = rememberCoroutineScope()
 
     val mainRoutes = listOf(Screen.Mensa.route, Screen.Lectures.route, Screen.More.route)
@@ -116,7 +124,7 @@ fun DhbwApp(httpClient: HttpClient, userPreferences: UserPreferences) {
                 }
                 composable(Screen.Lectures.route) {
                     LecturesScreen(
-                        apiClient = apiClient,
+                        calendarRepository = calendarRepository,
                         course = selectedCourse ?: "",
                     )
                 }
@@ -180,7 +188,7 @@ fun DhbwApp(httpClient: HttpClient, userPreferences: UserPreferences) {
                     val type = backStackEntry.arguments?.getString("type") ?: ""
                     val name = backStackEntry.arguments?.getString("name") ?: ""
                     EntityTimetableScreen(
-                        apiClient = apiClient,
+                        calendarRepository = calendarRepository,
                         site = selectedSite ?: "",
                         type = type,
                         name = name,
