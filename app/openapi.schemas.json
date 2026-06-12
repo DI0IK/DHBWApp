@@ -1,0 +1,445 @@
+{
+  "paths": {
+    "/sites": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SiteDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sites/{site}": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mensa": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MensaResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mensa/{site}": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MensaResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rapla/lectures/{course}": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RaplaLectureEvent"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rapla/{site}/rooms": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoomAvailabilityResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rapla/{site}/lectures": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RaplaLectureEvent"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/courses": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/courses/{site}": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/parking": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ParkingLot"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/parking/{site}": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ParkingLot"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EventCalendar"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events/{site}": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EventCalendar"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "SiteDto": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "site": { "type": "string" },
+          "mensa": { "type": "string" },
+          "lectures": { "type": "string" },
+          "parking": { "type": "string" },
+          "rooms": { "type": "string" }
+        },
+        "required": ["id", "site", "mensa", "lectures", "parking"]
+      },
+      "MensaResponse": {
+        "type": "object",
+        "properties": {
+          "lastUpdate": { "type": "string" },
+          "mensaInfo": { "$ref": "#/components/schemas/MensaInfo" },
+          "menus": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/MenuDay" }
+          }
+        },
+        "required": ["lastUpdate", "mensaInfo", "menus"]
+      },
+      "MensaInfo": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "site": { "type": "string" },
+          "name": { "type": "string" },
+          "active": { "type": "boolean" },
+          "address": { "type": "string" },
+          "openingHours": { "type": "string" },
+          "infoUrl": { "type": "string" },
+          "menuUrl": { "type": "string" }
+        },
+        "required": ["id", "site", "name", "active"]
+      },
+      "MenuDay": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "site": { "type": "string" },
+          "date": { "type": "string" },
+          "closed": { "type": "boolean" },
+          "starters": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/MenuItem" }
+          },
+          "mainCourses": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/MenuItem" }
+          },
+          "desserts": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/MenuItem" }
+          }
+        },
+        "required": ["id", "site", "date", "closed"]
+      },
+      "MenuItem": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "name": { "type": "string" },
+          "type": { "type": "string" },
+          "priceStudent": { "type": "number", "format": "double" },
+          "priceEmployee": { "type": "number", "format": "double" },
+          "priceGuest": { "type": "number", "format": "double" },
+          "image": { "type": "string" }
+        },
+        "required": ["id", "name", "type"]
+      },
+      "RaplaLectureEvent": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "date": { "type": "string" },
+          "site": { "type": "string" },
+          "startTime": { "type": "string" },
+          "endTime": { "type": "string" },
+          "name": { "type": "string" },
+          "type": { "type": "string" },
+          "lecturer": { "type": "string" },
+          "rooms": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "course": { "type": "string" }
+        },
+        "required": ["id", "date", "site", "startTime", "endTime", "name", "type", "rooms", "course"]
+      },
+      "ParkingLot": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "name": { "type": "string" },
+          "site": { "type": "string" },
+          "address": { "type": "string" },
+          "infoUrl": { "type": "string" },
+          "sitePriority": { "type": "integer" },
+          "active": { "type": "boolean" },
+          "totalCapacity": { "type": "integer" },
+          "latestUtilization": { "$ref": "#/components/schemas/ParkingLotUtilization" },
+          "studentCapacity": { "type": "integer" },
+          "employeeCapacity": { "type": "integer" }
+        },
+        "required": ["id", "name", "site", "active"]
+      },
+      "ParkingLotUtilization": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "timestamp": { "type": "string" },
+          "studentUtilized": { "type": "number", "format": "double", "nullable": true },
+          "employeeUtilized": { "type": "number", "format": "double", "nullable": true },
+          "totalAvailable": { "type": "integer" },
+          "totalUtilized": { "type": "number", "format": "double" },
+          "parkingLotInfo": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "integer" }
+            },
+            "required": ["id"]
+          },
+          "studentAvailable": { "type": "integer" },
+          "employeeAvailable": { "type": "integer" }
+        },
+        "required": ["id", "timestamp", "totalAvailable", "totalUtilized"]
+      },
+      "EventCalendar": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "name": { "type": "string" },
+          "studentOrganization": { "type": "string" },
+          "site": { "type": "string" },
+          "type": { "type": "string" },
+          "events": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Event" }
+          }
+        },
+        "required": ["id", "name", "studentOrganization", "site", "type", "events"]
+      },
+      "RoomAvailabilityResponse": {
+        "type": "object",
+        "properties": {
+          "site": { "type": "string" },
+          "date": { "type": "string" },
+          "stats": {
+            "type": "object",
+            "properties": {
+              "total": { "type": "integer" },
+              "free": { "type": "integer" },
+              "occupied": { "type": "integer" }
+            },
+            "required": ["total", "free", "occupied"]
+          },
+          "rooms": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/RoomInfo" }
+          }
+        },
+        "required": ["site", "date", "stats", "rooms"]
+      },
+      "RoomInfo": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "status": { "type": "string" },
+          "occupancies": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/RoomOccupancy" }
+          }
+        },
+        "required": ["name", "status"]
+      },
+      "RoomOccupancy": {
+        "type": "object",
+        "properties": {
+          "startTime": { "type": "string" },
+          "endTime": { "type": "string" },
+          "isPublic": { "type": "boolean" },
+          "lectureName": { "type": "string" },
+          "lecturer": { "type": "string" },
+          "courseName": { "type": "string" }
+        },
+        "required": ["startTime", "endTime", "isPublic"]
+      },
+      "Event": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "studentOrganization": { "type": "string" },
+          "site": { "type": "string" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "location": { "type": "string" },
+          "category": { "type": "string", "nullable": true },
+          "audience": { "type": "string", "nullable": true },
+          "date": { "type": "string" },
+          "endDate": { "type": "string" },
+          "startTime": { "type": "string" },
+          "endTime": { "type": "string" },
+          "allDay": { "type": "boolean" }
+        },
+        "required": ["id", "studentOrganization", "site", "name", "date", "endDate", "startTime", "endTime", "allDay"]
+      }
+    }
+  }
+}
