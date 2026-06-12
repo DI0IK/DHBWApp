@@ -287,8 +287,28 @@ private fun MenuItemRow(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DishDetailSheetContent(item: MenuItem) {
-    val (cleanedName, allergens) = remember(item.name) { extractAllergensAndCleanName(item.name) }
-    val (sustainabilityLabel, co2Value) = remember(item.name) { getSustainabilityInfo(item.name) }
+    val (cleanedName, extractedAllergens) = remember(item.name) { extractAllergensAndCleanName(item.name) }
+    
+    val (apiAllergens, apiAdditives) = remember(item.allergens, item.additives) {
+        parseAllergensAndAdditives(item.allergens, item.additives)
+    }
+
+    val allergens = (extractedAllergens + apiAllergens).distinct().sorted()
+    val additives = apiAdditives
+
+    val co2Val = item.co2Portion
+    val sustainabilityInfo = remember(co2Val) {
+        if (co2Val != null) {
+            val label = when {
+                co2Val < 200 -> "🟢 Low Impact"
+                co2Val < 600 -> "🟡 Medium Impact"
+                else -> "🔴 High Impact"
+            }
+            Pair(label, "${co2Val.toInt()}g CO₂e")
+        } else {
+            null
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -367,42 +387,44 @@ private fun DishDetailSheetContent(item: MenuItem) {
         Spacer(modifier = Modifier.height(16.dp))
 
         // Sustainability Metric
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(12.dp)
+        sustainabilityInfo?.let { (sustainabilityLabel, co2Value) ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Eco,
+                    contentDescription = null,
+                    tint = if (sustainabilityLabel.startsWith("🟢")) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(24.dp)
                 )
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.Eco,
-                contentDescription = null,
-                tint = if (sustainabilityLabel.startsWith("🟢")) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                modifier = Modifier.size(24.dp)
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column {
-                Text(
-                    text = "Nachhaltigkeit",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "$sustainabilityLabel ($co2Value)",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(
+                        text = "Nachhaltigkeit",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "$sustainabilityLabel ($co2Value)",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Allergens and Additives Section
+        // Allergens Section
         Text(
-            text = "Allergene & Zusatzstoffe",
+            text = "Allergene",
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary
@@ -423,6 +445,36 @@ private fun DishDetailSheetContent(item: MenuItem) {
                     SuggestionChip(
                         onClick = {},
                         label = { Text(allergen) }
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Additives Section
+        Text(
+            text = "Zusatzstoffe",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        if (additives.isEmpty()) {
+            Text(
+                text = "Keine deklarationspflichtigen Zusatzstoffe.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                additives.forEach { additive ->
+                    SuggestionChip(
+                        onClick = {},
+                        label = { Text(additive) }
                     )
                 }
             }
@@ -461,6 +513,70 @@ private fun PriceCard(label: String, price: Double?, modifier: Modifier = Modifi
     }
 }
 
+private fun parseAllergensAndAdditives(
+    itemAllergens: List<String>?,
+    itemAdditives: List<String>?
+): Pair<List<String>, List<String>> {
+    val rawAllergens = (itemAllergens.orEmpty() + itemAdditives.orEmpty())
+        .filter { it.isNotBlank() }
+        .distinct()
+
+    val allergensList = mutableListOf<String>()
+    val additivesList = mutableListOf<String>()
+
+    rawAllergens.forEach { code ->
+        val cleaned = code.trim().lowercase()
+        if (cleaned.toIntOrNull() != null) {
+            val name = when (cleaned) {
+                "1" -> "Farbstoff"
+                "2" -> "Konservierungsstoffe"
+                "3" -> "Antioxidationsmittel"
+                "4" -> "Geschmacksverstärker"
+                "5" -> "Geschwefelt"
+                "6" -> "Geschwärzt"
+                "7" -> "Gewachst"
+                "8" -> "Phosphat"
+                "9" -> "Süßungsmittel"
+                "10" -> "Phenylalaninquelle"
+                "12" -> "Unter Schutzatmosphäre verpackt"
+                else -> "Zusatzstoff $code"
+            }
+            additivesList.add(name)
+        } else {
+            val name = when (cleaned) {
+                "we", "gl", "a" -> "Gluten/Weizen"
+                "mi", "la", "ml", "g" -> "Milch/Laktose"
+                "ei", "c" -> "Ei"
+                "so", "f" -> "Soja"
+                "se", "l" -> "Sellerie"
+                "sf", "m" -> "Senf"
+                "sn", "sa", "i" -> "Sesam"
+                "fi", "d" -> "Fisch"
+                "kr", "b" -> "Krebstiere"
+                "er", "e" -> "Erdnüsse"
+                "nu", "h" -> "Nüsse"
+                "su", "o" -> "Schwefeldioxid"
+                "lu", "p" -> "Lupinen"
+                "wt", "n" -> "Weichtiere"
+                "lab" -> "Lab"
+                "di" -> "Dinkel"
+                else -> null
+            }
+            if (name != null) {
+                allergensList.add(name)
+            } else {
+                if (code.length > 2 && code.all { it.isUpperCase() }) {
+                    additivesList.add(code)
+                } else {
+                    allergensList.add(code)
+                }
+            }
+        }
+    }
+
+    return Pair(allergensList.distinct().sorted(), additivesList.distinct().sorted())
+}
+
 private fun extractAllergensAndCleanName(fullName: String): Pair<String, List<String>> {
     val regex = Regex("\\(([^)]+)\\)\\s*$")
     val matchResult = regex.find(fullName)
@@ -495,20 +611,6 @@ private fun extractAllergensAndCleanName(fullName: String): Pair<String, List<St
     return Pair(fullName, emptyList())
 }
 
-private fun getSustainabilityInfo(dishName: String): Pair<String, String> {
-    val lower = dishName.lowercase()
-    return when {
-        lower.contains("rind") || lower.contains("schwein") || lower.contains("fleisch") || lower.contains("schnitzel") -> {
-            Pair("🔴 High Impact", "850g CO₂e")
-        }
-        lower.contains("geflügel") || lower.contains("hähnchen") || lower.contains("fisch") -> {
-            Pair("🟡 Medium Impact", "320g CO₂e")
-        }
-        else -> {
-            Pair("🟢 Low Impact", "65g CO₂e")
-        }
-    }
-}
 
 private fun formatDate(dateString: String): String {
     val date = MensaViewModel.apiDateToLocalDate(dateString) ?: return dateString

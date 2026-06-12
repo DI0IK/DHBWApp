@@ -300,7 +300,17 @@
           "priceStudent": { "type": "number", "format": "double" },
           "priceEmployee": { "type": "number", "format": "double" },
           "priceGuest": { "type": "number", "format": "double" },
-          "image": { "type": "string" }
+          "image": { "type": "string" },
+          "co2Portion": { "type": "number", "format": "double", "nullable": true },
+          "co2100g": { "type": "number", "format": "double", "nullable": true },
+          "allergens": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "additives": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
         },
         "required": ["id", "name", "type"]
       },
