@@ -47,12 +47,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import dev.dominikstahl.dhbwapp.data.remote.ApiClient
 import dev.dominikstahl.dhbwapp.remote.models.MenuDay
 import dev.dominikstahl.dhbwapp.remote.models.MenuItem
 import java.text.NumberFormat
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+
 
 private val priceFormat = NumberFormat.getCurrencyInstance(Locale.GERMANY)
 private val dayFormat = DateTimeFormatter.ofPattern("EEEE, d. MMMM", Locale.GERMANY)
@@ -319,24 +323,36 @@ private fun DishDetailSheetContent(item: MenuItem) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(140.dp)
+                .height(180.dp)
                 .background(
                     brush = Brush.verticalGradient(
                         colors = listOf(
-                            MaterialTheme.colorScheme.primary,
-                            MaterialTheme.colorScheme.secondary
+                            MaterialTheme.colorScheme.primaryContainer,
+                            MaterialTheme.colorScheme.secondaryContainer
                         )
                     ),
                     shape = RoundedCornerShape(16.dp)
                 ),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = Icons.Default.Restaurant,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.size(48.dp)
-            )
+            val hasImage = !item.image.isNullOrBlank()
+            if (hasImage) {
+                AsyncImage(
+                    model = item.image,
+                    contentDescription = cleanedName,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(16.dp)),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Default.Restaurant,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(48.dp)
+                )
+            }
             
             // Type Badge
             Surface(
