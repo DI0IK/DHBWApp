@@ -58,12 +58,11 @@ jobs:
     name: Build and Sign Release APK
     runs-on: ubuntu-latest
     needs: test
-    if: github.ref_type == 'tag'
+    if: github.ref_type == 'tag' || github.event_name == 'release'
     
-    # Permissions are required so GitHub Actions can create/modify releases
     permissions:
-      contents: write
-      
+      contents: write # Crucial permission for uploading assets to releases
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -92,10 +91,10 @@ jobs:
           $ANDROID_HOME/build-tools/34.0.0/apksigner sign --ks release.keystore --ks-pass pass:"$ANDROID_KEYSTORE_PASSWORD" --ks-key-alias "$ANDROID_KEY_ALIAS" --key-pass pass:"$ANDROID_KEY_PASSWORD" --out app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/app-release-unsigned.apk
           rm -f release.keystore
 
-      - name: Upload APK to Existing GitHub Release
+      - name: Upload APK to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           files: app/build/outputs/apk/release/app-release.apk
-          # We purposefully omit 'name' and 'body' here 
-          # so your custom release title and notes are untouched.
+          # 'name' and 'body' are intentionally excluded here 
+          # to safeguard your original release titles and notes.
