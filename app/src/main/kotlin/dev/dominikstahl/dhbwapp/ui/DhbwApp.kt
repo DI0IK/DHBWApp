@@ -176,7 +176,7 @@ fun DhbwApp(httpClient: HttpClient, userPreferences: UserPreferences) {
                 }
                 composable(Screen.Directory.route) {
                     DirectoryScreen(
-                        apiClient = apiClient,
+                        calendarRepository = calendarRepository,
                         site = selectedSite ?: "",
                         onBackClick = { navController.popBackStack() },
                         onEntityClick = { type, name ->

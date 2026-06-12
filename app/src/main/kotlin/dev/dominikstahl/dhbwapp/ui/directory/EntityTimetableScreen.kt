@@ -39,6 +39,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.dominikstahl.dhbwapp.data.repository.CalendarRepository
 import dev.dominikstahl.dhbwapp.data.model.EnrichedLectureEvent
+import dev.dominikstahl.dhbwapp.ui.lectures.LecturesViewModel
+import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -66,21 +68,29 @@ fun EntityTimetableScreen(
         factory = EntityTimetableViewModel.Factory(calendarRepository, site, type, name)
     )
     val state by viewModel.uiState.collectAsState()
-    val selectedDate = viewModel.lectureDays.getOrNull(state.selectedDayIndex)
 
     val title = when (type) {
         "lecturer" -> "Stundenplan: $name"
-        "room" -> "Raumplan: $name"
-        "course" -> "Kursplan: $name"
-        else -> name
+        "room"     -> "Raumplan: $name"
+        "course"   -> "Kursplan: $name"
+        else       -> name
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBar(
-            title = { Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) },
+            title = {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            },
             navigationIcon = {
                 IconButton(onClick = onBackClick) {
-                    Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Zurück"
+                    )
                 }
             },
             windowInsets = androidx.compose.foundation.layout.WindowInsets(0.dp)
@@ -106,40 +116,38 @@ fun EntityTimetableScreen(
                 }
             }
             else -> {
+                val page = state.page
+                val days = viewModel.daysInCurrentPage()
+
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    item(key = "date_selector") {
-                        DateSelector(
-                            dateText = if (selectedDate != null) selectedDate.format(dayFormat) else "",
-                            onPrevious = { viewModel.previousDay() },
-                            onNext = { viewModel.nextDay() },
-                            hasPrevious = state.selectedDayIndex > 0,
-                            hasNext = state.selectedDayIndex < viewModel.lectureDays.lastIndex,
+                    item(key = "week_selector") {
+                        WeekSelector(
+                            weekText = if (page != null) LecturesViewModel.weekLabel(page.weekMonday) else "",
+                            onPrevious = { viewModel.previousWeek() },
+                            onNext = { viewModel.nextWeek() },
+                            hasPrevious = page?.hasPrevious == true,
+                            hasNext = page?.hasNext == true,
                         )
                     }
-                    if (selectedDate != null) {
-                        val dayLectures = viewModel.lecturesForDay(selectedDate)
-                        if (dayLectures.isEmpty()) {
-                            item(key = "empty") {
-                                Text(
-                                    text = "Keine Veranstaltungen an diesem Tag",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(16.dp),
-                                )
-                            }
-                        } else {
-                            items(dayLectures.size, key = { i -> dayLectures[i].lecture.id }) { i ->
-                                LectureCard(enriched = dayLectures[i])
-                            }
-                        }
-                    } else {
-                        item(key = "no_days") {
+
+                    if (days.isEmpty()) {
+                        item(key = "empty") {
                             Text(
-                                text = "Keine Vorlesungstermine gefunden",
+                                text = "Keine Veranstaltungen in dieser Woche",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(16.dp),
                             )
+                        }
+                    } else {
+                        days.forEach { day ->
+                            item(key = "day_header_$day") {
+                                DayHeader(day)
+                            }
+                            val dayLectures = viewModel.lecturesForDay(day)
+                            items(dayLectures.size, key = { i -> dayLectures[i].lecture.id }) { i ->
+                                LectureCard(enriched = dayLectures[i])
+                            }
                         }
                     }
                 }
@@ -149,8 +157,8 @@ fun EntityTimetableScreen(
 }
 
 @Composable
-private fun DateSelector(
-    dateText: String,
+private fun WeekSelector(
+    weekText: String,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     hasPrevious: Boolean,
@@ -164,18 +172,32 @@ private fun DateSelector(
         TextButton(onClick = onPrevious, enabled = hasPrevious) {
             Text("<", fontWeight = FontWeight.Bold)
         }
-        Spacer(modifier = Modifier.width(16.dp))
+        Spacer(modifier = Modifier.width(8.dp))
         Text(
-            text = dateText,
+            text = weekText,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
             textAlign = TextAlign.Center,
+            modifier = Modifier.weight(1f),
         )
-        Spacer(modifier = Modifier.width(16.dp))
+        Spacer(modifier = Modifier.width(8.dp))
         TextButton(onClick = onNext, enabled = hasNext) {
             Text(">", fontWeight = FontWeight.Bold)
         }
     }
+}
+
+@Composable
+private fun DayHeader(date: LocalDate) {
+    Text(
+        text = date.format(dayFormat),
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
+    )
 }
 
 @Composable
@@ -233,7 +255,7 @@ private fun LectureCard(enriched: EnrichedLectureEvent) {
                         DetailRow("Dozent", lecture.lecturer ?: "-")
                         DetailRow("Räume", lecture.rooms.joinToString(", "))
                         DetailRow("Kurs", lecture.course)
-                        
+
                         enriched.enrichments["rapla_details"]?.let { raplaInfo ->
                             Spacer(modifier = Modifier.height(6.dp))
                             DetailRow("Info", "ℹ️ $raplaInfo")

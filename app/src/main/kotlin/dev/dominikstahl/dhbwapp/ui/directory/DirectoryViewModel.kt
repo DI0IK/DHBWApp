@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import dev.dominikstahl.dhbwapp.data.remote.ApiClient
+import dev.dominikstahl.dhbwapp.data.repository.CalendarRepository
 import dev.dominikstahl.dhbwapp.remote.models.RaplaLectureEvent
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,7 +25,7 @@ data class DirectoryUiState(
 )
 
 class DirectoryViewModel(
-    private val apiClient: ApiClient,
+    private val calendarRepository: CalendarRepository,
     private val site: String,
 ) : ViewModel() {
 
@@ -39,11 +40,12 @@ class DirectoryViewModel(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(loading = true, error = null)
             try {
-                val lectures = apiClient.getLectures(site)
+                val lectures = calendarRepository.getLectures(site)
+                val rawLectures = lectures.map { it.lecture }
                 
-                val lecturersList = DirectoryExtractor.extractLecturers(lectures)
-                val roomsList = DirectoryExtractor.extractRooms(lectures)
-                val coursesList = DirectoryExtractor.extractCourses(lectures)
+                val lecturersList = DirectoryExtractor.extractLecturers(rawLectures)
+                val roomsList = DirectoryExtractor.extractRooms(rawLectures)
+                val coursesList = DirectoryExtractor.extractCourses(rawLectures)
 
                 _uiState.value = _uiState.value.copy(
                     lecturers = lecturersList,
@@ -92,12 +94,12 @@ class DirectoryViewModel(
     }
 
     class Factory(
-        private val apiClient: ApiClient,
+        private val calendarRepository: CalendarRepository,
         private val site: String,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return DirectoryViewModel(apiClient, site) as T
+            return DirectoryViewModel(calendarRepository, site) as T
         }
     }
 }

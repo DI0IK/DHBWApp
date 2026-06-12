@@ -40,18 +40,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import dev.dominikstahl.dhbwapp.data.remote.ApiClient
+import dev.dominikstahl.dhbwapp.data.repository.CalendarRepository
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DirectoryScreen(
-    apiClient: ApiClient,
+    calendarRepository: CalendarRepository,
     site: String,
     onBackClick: () -> Unit,
     onEntityClick: (type: String, name: String) -> Unit,
 ) {
     val viewModel: DirectoryViewModel = viewModel(
-        factory = DirectoryViewModel.Factory(apiClient, site)
+        factory = DirectoryViewModel.Factory(calendarRepository, site)
     )
     val state by viewModel.uiState.collectAsState()
 
