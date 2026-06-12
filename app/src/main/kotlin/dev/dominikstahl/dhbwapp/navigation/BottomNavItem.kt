@@ -1,6 +1,7 @@
 package dev.dominikstahl.dhbwapp.navigation
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.School
@@ -13,7 +14,8 @@ data class BottomNavItem(
 )
 
 val bottomNavItems = listOf(
-    BottomNavItem("Mensa", Icons.Default.Restaurant, Screen.Mensa),
+    BottomNavItem("Dashboard", Icons.Default.Dashboard, Screen.Dashboard),
     BottomNavItem("Vorlesungen", Icons.Default.School, Screen.Lectures),
+    BottomNavItem("Mensa", Icons.Default.Restaurant, Screen.Mensa),
     BottomNavItem("Mehr", Icons.Default.MoreHoriz, Screen.More),
 )

@@ -123,6 +123,7 @@ private fun FilterRow(
 fun MensaScreen(
     apiClient: ApiClient,
     site: String,
+    userType: String?,
 ) {
     val viewModel: MensaViewModel = viewModel(
         factory = MensaViewModel.Factory(apiClient, site),
@@ -198,6 +199,7 @@ fun MensaScreen(
                                 filterVeggie = filterVeggie,
                                 filterUnder5 = filterUnder5,
                                 filterLowCo2 = filterLowCo2,
+                                userType = userType,
                                 onItemClick = { selectedItem = it }
                             )
                         }
@@ -211,7 +213,7 @@ fun MensaScreen(
                 onDismissRequest = { selectedItem = null },
                 sheetState = sheetState,
             ) {
-                DishDetailSheetContent(mergedItem = selectedItem!!)
+                DishDetailSheetContent(mergedItem = selectedItem!!, userType = userType)
             }
         }
     }
@@ -272,6 +274,7 @@ private fun DayContent(
     filterVeggie: Boolean,
     filterUnder5: Boolean,
     filterLowCo2: Boolean,
+    userType: String?,
     onItemClick: (MergedMenuItem) -> Unit,
 ) {
     Column(modifier = Modifier.padding(horizontal = 16.dp)) {
@@ -286,13 +289,14 @@ private fun DayContent(
         } else {
             day.starters.orEmpty().let { items ->
                 val grouped = groupMenuItems(items)
-                    .filter { it.matchesFilters(filterVeggie, filterUnder5, filterLowCo2) }
-                    .map { it.filterVariants(filterVeggie, filterUnder5, filterLowCo2) }
+                    .filter { it.matchesFilters(filterVeggie, filterUnder5, filterLowCo2, userType) }
+                    .map { it.filterVariants(filterVeggie, filterUnder5, filterLowCo2, userType) }
                 if (grouped.isNotEmpty()) {
                     CategoryLabel("Vorspeisen")
                     grouped.forEach { mergedItem ->
                         MenuItemCard(
                             mergedItem = mergedItem,
+                            userType = userType,
                             onClick = { onItemClick(mergedItem) }
                         )
                     }
@@ -300,13 +304,14 @@ private fun DayContent(
             }
             day.mainCourses.orEmpty().let { items ->
                 val grouped = groupMenuItems(items)
-                    .filter { it.matchesFilters(filterVeggie, filterUnder5, filterLowCo2) }
-                    .map { it.filterVariants(filterVeggie, filterUnder5, filterLowCo2) }
+                    .filter { it.matchesFilters(filterVeggie, filterUnder5, filterLowCo2, userType) }
+                    .map { it.filterVariants(filterVeggie, filterUnder5, filterLowCo2, userType) }
                 if (grouped.isNotEmpty()) {
                     CategoryLabel("Hauptgerichte")
                     grouped.forEach { mergedItem ->
                         MenuItemCard(
                             mergedItem = mergedItem,
+                            userType = userType,
                             onClick = { onItemClick(mergedItem) }
                         )
                     }
@@ -314,13 +319,14 @@ private fun DayContent(
             }
             day.desserts.orEmpty().let { items ->
                 val grouped = groupMenuItems(items)
-                    .filter { it.matchesFilters(filterVeggie, filterUnder5, filterLowCo2) }
-                    .map { it.filterVariants(filterVeggie, filterUnder5, filterLowCo2) }
+                    .filter { it.matchesFilters(filterVeggie, filterUnder5, filterLowCo2, userType) }
+                    .map { it.filterVariants(filterVeggie, filterUnder5, filterLowCo2, userType) }
                 if (grouped.isNotEmpty()) {
                     CategoryLabel("Desserts")
                     grouped.forEach { mergedItem ->
                         MenuItemCard(
                             mergedItem = mergedItem,
+                            userType = userType,
                             onClick = { onItemClick(mergedItem) }
                         )
                     }
@@ -345,6 +351,7 @@ private fun CategoryLabel(name: String) {
 @Composable
 private fun MenuItemCard(
     mergedItem: MergedMenuItem,
+    userType: String?,
     onClick: () -> Unit,
 ) {
     val baseItem = mergedItem.baseItem
@@ -474,9 +481,10 @@ private fun MenuItemCard(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.weight(1f)
                                     )
-                                    variant.priceStudent?.let { vPrice ->
+                                    val variantPrice = variant.getPriceForUserType(userType)
+                                    if (variantPrice != null) {
                                         Text(
-                                            text = priceFormat.format(vPrice),
+                                            text = priceFormat.format(variantPrice),
                                             style = MaterialTheme.typography.bodySmall,
                                             fontWeight = FontWeight.SemiBold,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -490,9 +498,10 @@ private fun MenuItemCard(
 
                 Spacer(modifier = Modifier.width(12.dp))
 
-                baseItem.priceStudent?.let { price ->
+                val basePrice = baseItem.getPriceForUserType(userType)
+                if (basePrice != null) {
                     Text(
-                        text = priceFormat.format(price),
+                        text = priceFormat.format(basePrice),
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Bold,
@@ -505,7 +514,7 @@ private fun MenuItemCard(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun DishDetailSheetContent(mergedItem: MergedMenuItem) {
+private fun DishDetailSheetContent(mergedItem: MergedMenuItem, userType: String?) {
     val item = mergedItem.baseItem
     val (cleanedName, extractedAllergens) = remember(item.name) { extractAllergensAndCleanName(item.name) }
     
@@ -611,9 +620,12 @@ private fun DishDetailSheetContent(mergedItem: MergedMenuItem) {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            PriceCard("Stud.", item.priceStudent, Modifier.weight(1f))
-            PriceCard("Mitarb.", item.priceEmployee, Modifier.weight(1f))
-            PriceCard("Gast", item.priceGuest, Modifier.weight(1f))
+            val isStudent = userType == null || userType == "Studierende"
+            val isEmployee = userType == "Mitarbeitende"
+            val isGuest = userType == "Gast"
+            PriceCard("Stud.", item.priceStudent, isStudent, Modifier.weight(1f))
+            PriceCard("Mitarb.", item.priceEmployee, isEmployee, Modifier.weight(1f))
+            PriceCard("Gast", item.priceGuest, isGuest, Modifier.weight(1f))
         }
 
         if (mergedItem.variants.isNotEmpty()) {
@@ -652,25 +664,30 @@ private fun DishDetailSheetContent(mergedItem: MergedMenuItem) {
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             variant.priceStudent?.let { vs ->
+                                val active = userType == null || userType == "Studierende"
                                 Text(
                                     text = "Stud.: ${priceFormat.format(vs)}",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.Medium
+                                    color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontWeight = if (active) FontWeight.Bold else FontWeight.Normal
                                 )
                             }
                             variant.priceEmployee?.let { ve ->
+                                val active = userType == "Mitarbeitende"
                                 Text(
                                     text = "Mitarb.: ${priceFormat.format(ve)}",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontWeight = if (active) FontWeight.Bold else FontWeight.Normal
                                 )
                             }
                             variant.priceGuest?.let { vg ->
+                                val active = userType == "Gast"
                                 Text(
                                     text = "Gast: ${priceFormat.format(vg)}",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontWeight = if (active) FontWeight.Bold else FontWeight.Normal
                                 )
                             }
                         }
@@ -784,12 +801,12 @@ private fun DishDetailSheetContent(mergedItem: MergedMenuItem) {
 }
 
 @Composable
-private fun PriceCard(label: String, price: Double?, modifier: Modifier = Modifier) {
+private fun PriceCard(label: String, price: Double?, isActive: Boolean, modifier: Modifier = Modifier) {
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer
+            containerColor = if (isActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer
         )
     ) {
         Column(
@@ -802,12 +819,12 @@ private fun PriceCard(label: String, price: Double?, modifier: Modifier = Modifi
                 text = if (price != null) priceFormat.format(price) else "-",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
+                color = if (isActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary
             )
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = if (isActive) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

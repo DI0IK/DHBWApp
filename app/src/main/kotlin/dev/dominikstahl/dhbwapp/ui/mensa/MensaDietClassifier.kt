@@ -231,17 +231,26 @@ fun groupMenuItems(items: List<MenuItem>): List<MergedMenuItem> {
 }
 
 
+fun MenuItem.getPriceForUserType(userType: String?): Double? {
+    return when (userType) {
+        "Mitarbeitende" -> priceEmployee ?: priceStudent
+        "Gast" -> priceGuest ?: priceStudent
+        else -> priceStudent
+    }
+}
+
 fun MergedMenuItem.matchesFilters(
     veggie: Boolean,
     under5: Boolean,
-    lowCo2: Boolean
+    lowCo2: Boolean,
+    userType: String? = null
 ): Boolean {
     if (veggie) {
         val diet = getDishDiet(baseItem)
         if (diet != DishDiet.VEGAN && diet != DishDiet.VEGETARIAN) return false
     }
     if (under5) {
-        val price = baseItem.priceStudent ?: 0.0
+        val price = baseItem.getPriceForUserType(userType) ?: 0.0
         if (price >= 5.0) return false
     }
     if (lowCo2) {
@@ -254,7 +263,8 @@ fun MergedMenuItem.matchesFilters(
 fun MergedMenuItem.filterVariants(
     veggie: Boolean,
     under5: Boolean,
-    lowCo2: Boolean
+    lowCo2: Boolean,
+    userType: String? = null
 ): MergedMenuItem {
     val filtered = variants.filter { variant ->
         if (veggie) {
@@ -262,7 +272,7 @@ fun MergedMenuItem.filterVariants(
             if (diet != DishDiet.VEGAN && diet != DishDiet.VEGETARIAN) return@filter false
         }
         if (under5) {
-            val price = variant.priceStudent ?: 0.0
+            val price = variant.getPriceForUserType(userType) ?: 0.0
             if (price >= 5.0) return@filter false
         }
         if (lowCo2) {

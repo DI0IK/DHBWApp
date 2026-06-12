@@ -1,6 +1,7 @@
 package dev.dominikstahl.dhbwapp.navigation
 
 sealed class Screen(val route: String) {
+    data object Dashboard : Screen("dashboard")
     data object Mensa : Screen("mensa")
     data object Lectures : Screen("lectures")
     data object More : Screen("more")

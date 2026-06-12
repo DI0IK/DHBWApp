@@ -27,6 +27,7 @@ import dev.dominikstahl.dhbwapp.data.local.UserPreferences
 import dev.dominikstahl.dhbwapp.data.remote.ApiClient
 import dev.dominikstahl.dhbwapp.navigation.Screen
 import dev.dominikstahl.dhbwapp.navigation.bottomNavItems
+import dev.dominikstahl.dhbwapp.ui.dashboard.DashboardScreen
 import dev.dominikstahl.dhbwapp.ui.mensa.MensaScreen
 import dev.dominikstahl.dhbwapp.ui.more.MoreScreen
 import dev.dominikstahl.dhbwapp.ui.onboarding.OnboardingScreen
@@ -44,6 +45,7 @@ import kotlinx.coroutines.launch
 fun DhbwApp(httpClient: HttpClient, userPreferences: UserPreferences) {
     val selectedSite by userPreferences.selectedSite.collectAsState(initial = null)
     val selectedCourse by userPreferences.selectedCourse.collectAsState(initial = null)
+    val currentUserType by userPreferences.userType.collectAsState(initial = null)
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
@@ -51,7 +53,7 @@ fun DhbwApp(httpClient: HttpClient, userPreferences: UserPreferences) {
     val apiClient = remember { ApiClient(httpClient) }
     val scope = rememberCoroutineScope()
 
-    val mainRoutes = listOf(Screen.Mensa.route, Screen.Lectures.route, Screen.More.route)
+    val mainRoutes = listOf(Screen.Dashboard.route, Screen.Mensa.route, Screen.Lectures.route, Screen.More.route)
     val detailRoutes = listOf(
         Screen.Parking.route,
         Screen.Rooms.route,
@@ -102,7 +104,7 @@ fun DhbwApp(httpClient: HttpClient, userPreferences: UserPreferences) {
             ) {
                 NavHost(
                     navController = navController,
-                    startDestination = if (selectedSite != null) Screen.Mensa.route else Screen.Onboarding.route,
+                    startDestination = if (selectedSite != null) Screen.Dashboard.route else Screen.Onboarding.route,
                     modifier = Modifier
                         .fillMaxHeight()
                         .widthIn(max = 800.dp),
@@ -122,10 +124,23 @@ fun DhbwApp(httpClient: HttpClient, userPreferences: UserPreferences) {
                         },
                     )
                 }
+                composable(Screen.Dashboard.route) {
+                    DashboardScreen(
+                        apiClient = apiClient,
+                        site = selectedSite ?: "",
+                        course = selectedCourse ?: "",
+                        userType = currentUserType,
+                        onNavigateToTimetable = { navController.navigate(Screen.Lectures.route) },
+                        onNavigateToMensa = { navController.navigate(Screen.Mensa.route) },
+                        onNavigateToParking = { navController.navigate(Screen.Parking.route) },
+                        onNavigateToRooms = { navController.navigate(Screen.Rooms.route) }
+                    )
+                }
                 composable(Screen.Mensa.route) {
                     MensaScreen(
                         apiClient = apiClient,
                         site = selectedSite ?: "",
+                        userType = currentUserType,
                     )
                 }
                 composable(Screen.Lectures.route) {
@@ -172,6 +187,7 @@ fun DhbwApp(httpClient: HttpClient, userPreferences: UserPreferences) {
                     SettingsScreen(
                         apiClient = apiClient,
                         currentSite = selectedSite,
+                        currentUserType = currentUserType,
                         currentCourse = selectedCourse,
                         onSiteSelected = { site ->
                             scope.launch {
@@ -184,6 +200,11 @@ fun DhbwApp(httpClient: HttpClient, userPreferences: UserPreferences) {
                                 userPreferences.setSelectedCourse(course)
                             }
                         },
+                        onUserTypeSelected = { type ->
+                            scope.launch {
+                                userPreferences.setSelectedUserType(type)
+                            }
+                        }
                     )
                 }
                 composable(Screen.Directory.route) {

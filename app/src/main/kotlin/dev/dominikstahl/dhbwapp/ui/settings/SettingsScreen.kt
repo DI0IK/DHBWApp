@@ -33,9 +33,11 @@ import dev.dominikstahl.dhbwapp.data.remote.ApiClient
 fun SettingsScreen(
     apiClient: ApiClient,
     currentSite: String?,
+    currentUserType: String?,
     currentCourse: String?,
     onSiteSelected: (String) -> Unit,
     onCourseSelected: (String) -> Unit,
+    onUserTypeSelected: (String) -> Unit,
 ) {
     val viewModel: SettingsViewModel = viewModel(
         factory = SettingsViewModel.Factory(apiClient),
@@ -43,6 +45,9 @@ fun SettingsScreen(
     val state by viewModel.uiState.collectAsState()
     var siteExpanded by remember { mutableStateOf(false) }
     var courseExpanded by remember { mutableStateOf(false) }
+    var userTypeExpanded by remember { mutableStateOf(false) }
+
+    val userTypes = listOf("Studierende", "Mitarbeitende", "Gast")
 
     LaunchedEffect(state.sites, currentSite) {
         if (currentSite != null && state.sites.isNotEmpty() && state.selectedSite == null) {
@@ -56,6 +61,14 @@ fun SettingsScreen(
         if (currentCourse != null && state.courses.isNotEmpty() && state.selectedCourse == null) {
             if (state.courses.contains(currentCourse)) {
                 viewModel.selectCourse(currentCourse)
+            }
+        }
+    }
+
+    LaunchedEffect(currentUserType) {
+        if (currentUserType != null && state.selectedUserType == null) {
+            if (userTypes.contains(currentUserType)) {
+                viewModel.selectUserType(currentUserType)
             }
         }
     }
@@ -100,6 +113,43 @@ fun SettingsScreen(
                                     viewModel.selectSite(site.site)
                                     onSiteSelected(site.site)
                                     siteExpanded = false
+                                },
+                                contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Wähle deine Benutzergruppe",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                ExposedDropdownMenuBox(
+                    expanded = userTypeExpanded,
+                    onExpandedChange = { userTypeExpanded = !userTypeExpanded },
+                ) {
+                    OutlinedTextField(
+                        value = state.selectedUserType ?: currentUserType ?: "Studierende",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Benutzergruppe") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = userTypeExpanded) },
+                        modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
+                    )
+                    ExposedDropdownMenu(
+                        expanded = userTypeExpanded,
+                        onDismissRequest = { userTypeExpanded = false },
+                    ) {
+                        userTypes.forEach { type ->
+                            DropdownMenuItem(
+                                text = { Text(type) },
+                                onClick = {
+                                    viewModel.selectUserType(type)
+                                    onUserTypeSelected(type)
+                                    userTypeExpanded = false
                                 },
                                 contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
                             )

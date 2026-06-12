@@ -14,6 +14,7 @@ class UserPreferences(private val context: Context) {
     companion object {
         private val SELECTED_SITE = stringPreferencesKey("selected_site")
         private val SELECTED_COURSE = stringPreferencesKey("selected_course")
+        private val USER_TYPE = stringPreferencesKey("user_type")
     }
 
     val selectedSite: Flow<String?> = context.dataStore.data.map { prefs ->
@@ -22,6 +23,10 @@ class UserPreferences(private val context: Context) {
 
     val selectedCourse: Flow<String?> = context.dataStore.data.map { prefs ->
         prefs[SELECTED_COURSE]
+    }
+
+    val userType: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[USER_TYPE]
     }
 
     suspend fun setSelectedSite(site: String) {
@@ -33,6 +38,12 @@ class UserPreferences(private val context: Context) {
     suspend fun setSelectedCourse(course: String) {
         context.dataStore.edit { prefs ->
             prefs[SELECTED_COURSE] = course
+        }
+    }
+
+    suspend fun setSelectedUserType(userType: String) {
+        context.dataStore.edit { prefs ->
+            prefs[USER_TYPE] = userType
         }
     }
 

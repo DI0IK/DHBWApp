@@ -58,17 +58,17 @@ fun MoreScreen(
         )
         Spacer(modifier = Modifier.height(8.dp))
         MoreItem(
-            icon = Icons.Default.Settings,
-            title = "Einstellungen",
-            description = "Standort und Kurs verwalten",
-            onClick = onSettingsClick,
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        MoreItem(
             icon = Icons.Default.Search,
             title = "Verzeichnis",
             description = "Vorlesungspläne nach Dozent, Raum oder Kurs",
             onClick = onDirectoryClick,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        MoreItem(
+            icon = Icons.Default.Settings,
+            title = "Einstellungen",
+            description = "Standort und Kurs verwalten",
+            onClick = onSettingsClick,
         )
     }
 }

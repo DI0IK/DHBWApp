@@ -14,6 +14,7 @@ data class SettingsUiState(
     val selectedSite: String? = null,
     val courses: List<String> = emptyList(),
     val selectedCourse: String? = null,
+    val selectedUserType: String? = null,
     val loading: Boolean = false,
     val coursesLoading: Boolean = false,
     val error: String? = null,
@@ -64,6 +65,10 @@ class SettingsViewModel(
 
     fun selectCourse(course: String) {
         _uiState.value = _uiState.value.copy(selectedCourse = course)
+    }
+
+    fun selectUserType(userType: String) {
+        _uiState.value = _uiState.value.copy(selectedUserType = userType)
     }
 
     class Factory(
