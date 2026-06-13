@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.FactCheck
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.LocalParking
 import androidx.compose.material.icons.filled.MeetingRoom
@@ -35,6 +36,7 @@ fun MoreScreen(
     onRoomsClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onDirectoryClick: () -> Unit,
+    onDualisClick: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text(
@@ -43,6 +45,13 @@ fun MoreScreen(
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(bottom = 16.dp),
         )
+        MoreItem(
+            icon = Icons.Default.FactCheck,
+            title = "Dualis",
+            description = "Noten und Studienergebnisse abrufen",
+            onClick = onDualisClick,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
         MoreItem(
             icon = Icons.Default.LocalParking,
             title = "Parken",

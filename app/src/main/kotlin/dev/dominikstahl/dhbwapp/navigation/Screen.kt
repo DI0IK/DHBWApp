@@ -11,4 +11,5 @@ sealed class Screen(val route: String) {
     data object Settings : Screen("settings")
     data object Directory : Screen("directory")
     data object EntityTimetable : Screen("entity_timetable/{type}/{name}")
+    data object Dualis : Screen("dualis")
 }

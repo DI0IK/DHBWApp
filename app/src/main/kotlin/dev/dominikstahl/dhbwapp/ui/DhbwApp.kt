@@ -22,8 +22,11 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.compose.ui.platform.LocalContext
 import dev.dominikstahl.dhbwapp.data.local.UserPreferences
+import dev.dominikstahl.dhbwapp.data.local.DualisCredentialsManager
 import dev.dominikstahl.dhbwapp.data.remote.ApiClient
+import dev.dominikstahl.dhbwapp.data.remote.DualisClient
 import dev.dominikstahl.dhbwapp.navigation.Screen
 import dev.dominikstahl.dhbwapp.navigation.bottomNavItems
 import dev.dominikstahl.dhbwapp.ui.dashboard.DashboardScreen
@@ -37,6 +40,7 @@ import dev.dominikstahl.dhbwapp.ui.theme.DhbwAppTheme
 import dev.dominikstahl.dhbwapp.ui.lectures.LecturesScreen
 import dev.dominikstahl.dhbwapp.ui.directory.DirectoryScreen
 import dev.dominikstahl.dhbwapp.ui.directory.EntityTimetableScreen
+import dev.dominikstahl.dhbwapp.ui.dualis.DualisScreen
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.launch
 
@@ -49,7 +53,10 @@ fun DhbwApp(httpClient: HttpClient, userPreferences: UserPreferences) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
+    val context = LocalContext.current
     val apiClient = remember { ApiClient(httpClient) }
+    val dualisClient = remember { DualisClient(httpClient) }
+    val dualisCredentialsManager = remember { DualisCredentialsManager(context) }
     val scope = rememberCoroutineScope()
 
     val mainRoutes = listOf(Screen.Dashboard.route, Screen.Mensa.route, Screen.Lectures.route, Screen.More.route)
@@ -58,7 +65,8 @@ fun DhbwApp(httpClient: HttpClient, userPreferences: UserPreferences) {
         Screen.Rooms.route,
         Screen.Settings.route,
         Screen.Directory.route,
-        Screen.EntityTimetable.route
+        Screen.EntityTimetable.route,
+        Screen.Dualis.route
     )
     val showBottomBar = selectedSite != null && currentRoute in mainRoutes + detailRoutes
 
@@ -156,7 +164,17 @@ fun DhbwApp(httpClient: HttpClient, userPreferences: UserPreferences) {
                         },
                         onDirectoryClick = {
                             navController.navigate(Screen.Directory.route)
+                        },
+                        onDualisClick = {
+                            navController.navigate(Screen.Dualis.route)
                         }
+                    )
+                }
+                composable(Screen.Dualis.route) {
+                    DualisScreen(
+                        dualisClient = dualisClient,
+                        credentialsManager = dualisCredentialsManager,
+                        onBackClick = { navController.popBackStack() }
                     )
                 }
                 composable(Screen.Parking.route) {

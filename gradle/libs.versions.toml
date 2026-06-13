@@ -8,6 +8,7 @@ appcompat = "1.7.1"
 material = "1.14.0"
 kotlin = "2.0.0"
 fabrikt = "1.35.0"
+jsoup = "1.16.1"
 
 ktor = "2.3.11"
 kotlinxSerializationJson = "1.6.3"
@@ -20,6 +21,7 @@ kotlinxDatetime = "0.6.1"
 coilCompose = "2.6.0"
 
 [libraries]
+jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
