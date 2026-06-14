@@ -214,7 +214,7 @@ private fun StatCard(label: String, value: Int, color: Color, modifier: Modifier
 private fun parseTime(timeStr: String): LocalTime? {
     return try {
         if (timeStr.contains("T")) {
-            OffsetDateTime.parse(timeStr).toLocalTime()
+            OffsetDateTime.parse(timeStr).atZoneSameInstant(java.time.ZoneId.systemDefault()).toLocalTime()
         } else {
             LocalTime.parse(timeStr.take(5))
         }

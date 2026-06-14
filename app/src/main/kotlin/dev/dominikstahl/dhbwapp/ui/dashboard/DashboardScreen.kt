@@ -46,9 +46,9 @@ import dev.dominikstahl.dhbwapp.ui.mensa.getPriceForUserType
 import dev.dominikstahl.dhbwapp.remote.models.ParkingLot
 import dev.dominikstahl.dhbwapp.remote.models.RaplaLectureEvent
 import java.time.LocalDate
+import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-
 import dev.dominikstahl.dhbwapp.data.remote.DualisClient
 import dev.dominikstahl.dhbwapp.data.local.DualisCredentialsManager
 import dev.dominikstahl.dhbwapp.data.local.UserPreferences
@@ -63,6 +63,14 @@ import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.FactCheck
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.Button
+
+private fun formatTime(time: String): String {
+    return try {
+        OffsetDateTime.parse(time).atZoneSameInstant(java.time.ZoneId.systemDefault()).toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm"))
+    } catch (_: Exception) {
+        time.take(5)
+    }
+}
 
 @Composable
 fun DashboardScreen(
@@ -173,7 +181,7 @@ fun DashboardScreen(
                                         fontWeight = FontWeight.SemiBold
                                     )
                                     Text(
-                                        text = "${lecture.startTime} - ${lecture.endTime} | ${lecture.rooms.joinToString(", ")}",
+                                        text = "${formatTime(lecture.startTime)} - ${formatTime(lecture.endTime)} | ${lecture.rooms.joinToString(", ")}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )

@@ -61,7 +61,7 @@ private val dayHeaderFormat = DateTimeFormatter.ofPattern("EEEE, d. MMMM", Local
 
 private fun formatTime(time: String): String {
     return try {
-        OffsetDateTime.parse(time).toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm"))
+        OffsetDateTime.parse(time).atZoneSameInstant(java.time.ZoneId.systemDefault()).toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm"))
     } catch (_: Exception) {
         time.take(5)
     }
@@ -69,7 +69,7 @@ private fun formatTime(time: String): String {
 
 private fun formatDate(time: String): String {
     return try {
-        OffsetDateTime.parse(time).format(dayFormat)
+        OffsetDateTime.parse(time).atZoneSameInstant(java.time.ZoneId.systemDefault()).format(dayFormat)
     } catch (_: Exception) {
         time
     }

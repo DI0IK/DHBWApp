@@ -18,6 +18,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.OffsetDateTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 import dev.dominikstahl.dhbwapp.ui.mensa.MergedMenuItem
@@ -180,10 +182,13 @@ class DashboardViewModel(
     }
 
     private fun String.isLecturePassed(): Boolean {
-        // Simple check. If format differs, default to false
         return try {
             val nowTime = java.time.LocalTime.now()
-            val parsedTime = java.time.LocalTime.parse(this.take(5))
+            val parsedTime = if (this.contains("T")) {
+                OffsetDateTime.parse(this).atZoneSameInstant(ZoneId.systemDefault()).toLocalTime()
+            } else {
+                java.time.LocalTime.parse(this.take(5))
+            }
             parsedTime.isBefore(nowTime)
         } catch (_: Exception) {
             false
