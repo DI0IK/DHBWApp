@@ -110,12 +110,9 @@ class DualisClient(private val httpClient: HttpClient) {
     }
 
     private fun refactorArguments(rawArguments: String): String {
-        val rawVal = rawArguments.substringAfter("ARGUMENTS=")
-        val parts = rawVal.split(",")
-            .map { it.trim() }
-            .filter { it.isNotEmpty() && it != "-N000000000000000" }
-            .map { if (it == "-N000019") "-N000307" else it }
-        return "ARGUMENTS=" + parts.joinToString(",")
+        return rawArguments
+            .replace("-N000000000000000", "")
+            .replace("-N000019", "-N000307")
     }
 
     private fun encode(value: String): String {
