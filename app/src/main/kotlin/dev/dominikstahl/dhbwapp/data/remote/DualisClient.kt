@@ -88,9 +88,9 @@ class DualisClient(private val httpClient: HttpClient) {
 
     private suspend fun fetchPage(url: String, cookies: List<String>): String {
         val response = httpClient.get(url) {
-            headers {
-                cookies.forEach { cookie ->
-                    append(HttpHeaders.Cookie, cookie)
+            if (cookies.isNotEmpty()) {
+                headers {
+                    append(HttpHeaders.Cookie, cookies.joinToString("; "))
                 }
             }
         }
