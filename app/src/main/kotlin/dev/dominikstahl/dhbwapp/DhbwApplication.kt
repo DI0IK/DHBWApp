@@ -9,7 +9,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
-import dev.dominikstahl.dhbwapp.data.local.DualisUpdateWorker
+import dev.dominikstahl.dhbwapp.data.local.DataSyncWorker
 import java.util.concurrent.TimeUnit
 
 class DhbwApplication : Application() {
@@ -25,7 +25,7 @@ class DhbwApplication : Application() {
             val name = "Dualis Updates"
             val descriptionText = "Benachrichtigungen bei neuen oder geänderten Noten in Dualis"
             val importance = NotificationManager.IMPORTANCE_DEFAULT
-            val channel = NotificationChannel(DualisUpdateWorker.CHANNEL_ID, name, importance).apply {
+            val channel = NotificationChannel(DataSyncWorker.CHANNEL_ID, name, importance).apply {
                 description = descriptionText
             }
             val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
@@ -38,12 +38,12 @@ class DhbwApplication : Application() {
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
 
-        val workRequest = PeriodicWorkRequestBuilder<DualisUpdateWorker>(15, TimeUnit.MINUTES)
+        val workRequest = PeriodicWorkRequestBuilder<DataSyncWorker>(15, TimeUnit.MINUTES)
             .setConstraints(constraints)
             .build()
 
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            "DualisUpdateWork",
+            "DataSyncWork",
             ExistingPeriodicWorkPolicy.KEEP,
             workRequest
         )

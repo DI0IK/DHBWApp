@@ -1,3 +1,7 @@
+// Portions of this file are derived from DHBWorld (https://github.com/heinf/DHBWorld)
+// Copyright (c) 2022 Linus Pust, Daria Kodolova, Christian Zäske
+// Licensed under the Apache License, Version 2.0
+
 package dev.dominikstahl.dhbwapp.data.remote
 
 import org.jsoup.Jsoup

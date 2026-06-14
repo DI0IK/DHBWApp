@@ -23,14 +23,16 @@ import dev.dominikstahl.dhbwapp.ui.components.LectureDetailBottomSheet
 import dev.dominikstahl.dhbwapp.ui.components.MergedLectureEvent
 import dev.dominikstahl.dhbwapp.ui.components.TimetableContent
 
+import dev.dominikstahl.dhbwapp.data.repository.TimetableRepository
+
 @Composable
 fun LecturesScreen(
-    apiClient: ApiClient,
+    timetableRepository: TimetableRepository,
     course: String,
     onEntityClick: (type: String, name: String) -> Unit,
 ) {
     val viewModel: LecturesViewModel = viewModel(
-        factory = LecturesViewModel.Factory(apiClient, course),
+        factory = LecturesViewModel.Factory(timetableRepository, course),
     )
     LaunchedEffect(course) {
         viewModel.setCourse(course)

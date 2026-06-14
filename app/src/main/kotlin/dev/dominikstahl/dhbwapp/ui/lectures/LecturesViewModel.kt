@@ -14,6 +14,9 @@ import java.time.ZoneId
 import java.time.temporal.TemporalAdjusters
 import java.time.DayOfWeek
 
+import dev.dominikstahl.dhbwapp.data.repository.TimetableRepository
+import kotlinx.coroutines.Job
+
 data class LecturesUiState(
     val lectures: List<RaplaLectureEvent> = emptyList(),
     val selectedWeekIndex: Int = 0,
@@ -22,7 +25,7 @@ data class LecturesUiState(
 )
 
 class LecturesViewModel(
-    private val apiClient: ApiClient,
+    private val timetableRepository: TimetableRepository,
     private var course: String,
 ) : ViewModel() {
 
@@ -33,17 +36,24 @@ class LecturesViewModel(
 
     var lectureWeeks: List<LocalDate> = emptyList()
 
+    private var collectionJob: Job? = null
+
+    init {
+        startFlowCollection()
+    }
+
     fun setCourse(newCourse: String) {
         course = newCourse
+        startFlowCollection()
     }
 
     fun hasCourse(): Boolean = course.isNotBlank()
 
-    fun loadLectures() {
-        viewModelScope.launch {
-            _uiState.value = LecturesUiState(loading = true)
-            try {
-                val all = apiClient.getLecturesForCourse(course, archived = false)
+    private fun startFlowCollection() {
+        collectionJob?.cancel()
+        if (course.isBlank()) return
+        collectionJob = viewModelScope.launch {
+            timetableRepository.getLectures(course).collect { all ->
                 currentLectures = all
                 
                 val days = all.mapNotNull { apiDateToLocalDate(it.date) }.distinct()
@@ -51,8 +61,19 @@ class LecturesViewModel(
                 
                 val todayWeekIndex = findTodayWeekIndex(lectureWeeks)
                 _uiState.value = LecturesUiState(lectures = all, selectedWeekIndex = todayWeekIndex)
+            }
+        }
+    }
+
+    fun loadLectures() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(loading = true)
+            try {
+                timetableRepository.syncLectures(course)
+                _uiState.value = _uiState.value.copy(loading = false)
             } catch (e: Exception) {
-                _uiState.value = LecturesUiState(
+                _uiState.value = _uiState.value.copy(
+                    loading = false,
                     error = e.message ?: "Fehler beim Laden der Vorlesungen",
                 )
             }
@@ -117,12 +138,12 @@ class LecturesViewModel(
     }
 
     class Factory(
-        private val apiClient: ApiClient,
+        private val timetableRepository: TimetableRepository,
         private val course: String,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return LecturesViewModel(apiClient, course) as T
+            return LecturesViewModel(timetableRepository, course) as T
         }
     }
 }

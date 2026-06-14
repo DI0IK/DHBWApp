@@ -19,6 +19,7 @@ class UserPreferences(private val context: Context) {
         private val DUALIS_COURSES_CACHE = stringPreferencesKey("dualis_courses_cache")
         private val NEWEST_GRADE_INFO = stringPreferencesKey("newest_grade_info")
         private val DUALIS_LAST_SYNC_TIME = longPreferencesKey("dualis_last_sync_time")
+        private val MOODLE_LAST_SYNC_TIME = longPreferencesKey("moodle_last_sync_time")
     }
 
     val selectedSite: Flow<String?> = context.dataStore.data.map { prefs ->
@@ -43,6 +44,10 @@ class UserPreferences(private val context: Context) {
 
     val lastSyncTime: Flow<Long?> = context.dataStore.data.map { prefs ->
         prefs[DUALIS_LAST_SYNC_TIME]
+    }
+
+    val moodleLastSyncTime: Flow<Long?> = context.dataStore.data.map { prefs ->
+        prefs[MOODLE_LAST_SYNC_TIME]
     }
 
     suspend fun setSelectedSite(site: String) {
@@ -81,6 +86,12 @@ class UserPreferences(private val context: Context) {
         }
     }
 
+    suspend fun setMoodleLastSyncTime(time: Long) {
+        context.dataStore.edit { prefs ->
+            prefs[MOODLE_LAST_SYNC_TIME] = time
+        }
+    }
+
     suspend fun clearSelectedCourse() {
         context.dataStore.edit { prefs ->
             prefs.remove(SELECTED_COURSE)
@@ -92,6 +103,12 @@ class UserPreferences(private val context: Context) {
             prefs.remove(DUALIS_COURSES_CACHE)
             prefs.remove(NEWEST_GRADE_INFO)
             prefs.remove(DUALIS_LAST_SYNC_TIME)
+        }
+    }
+
+    suspend fun clearMoodleCache() {
+        context.dataStore.edit { prefs ->
+            prefs.remove(MOODLE_LAST_SYNC_TIME)
         }
     }
 }

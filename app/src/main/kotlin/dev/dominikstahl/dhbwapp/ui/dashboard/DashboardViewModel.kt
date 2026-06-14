@@ -27,6 +27,12 @@ import dev.dominikstahl.dhbwapp.ui.mensa.groupMenuItems
 
 import dev.dominikstahl.dhbwapp.data.local.UserPreferences
 
+import dev.dominikstahl.dhbwapp.data.repository.TimetableRepository
+import dev.dominikstahl.dhbwapp.data.repository.MensaRepository
+import dev.dominikstahl.dhbwapp.data.repository.MoodleRepository
+import dev.dominikstahl.dhbwapp.data.local.db.CachedMoodleAssignment
+import kotlinx.coroutines.Job
+
 data class DashboardUiState(
     val upcomingLectures: List<RaplaLectureEvent> = emptyList(),
     val todayMensaMeals: List<MergedMenuItem> = emptyList(),
@@ -41,9 +47,13 @@ data class DashboardUiState(
     val dualisLoading: Boolean = false,
     val dualisError: String? = null,
     val dualisNewestGrade: String? = null,
+    val upcomingMoodleTasks: List<CachedMoodleAssignment> = emptyList()
 )
 
 class DashboardViewModel(
+    private val timetableRepository: TimetableRepository,
+    private val mensaRepository: MensaRepository,
+    private val moodleRepository: MoodleRepository,
     private val apiClient: ApiClient,
     private val dualisClient: DualisClient,
     private val credentialsManager: DualisCredentialsManager,
@@ -55,6 +65,8 @@ class DashboardViewModel(
     private val _uiState = MutableStateFlow(DashboardUiState())
     val uiState: StateFlow<DashboardUiState> = _uiState
 
+    private var collectionJob: Job? = null
+
     init {
         checkSavedDualisCredentials()
         viewModelScope.launch {
@@ -62,6 +74,7 @@ class DashboardViewModel(
                 _uiState.value = _uiState.value.copy(dualisNewestGrade = newestGrade)
             }
         }
+        startFlowCollection()
     }
 
     fun checkSavedDualisCredentials() {
@@ -90,10 +103,62 @@ class DashboardViewModel(
         }
     }
 
+    private fun startFlowCollection() {
+        collectionJob?.cancel()
+        collectionJob = viewModelScope.launch {
+            launch {
+                timetableRepository.getLectures(course).collect { lectures ->
+                    val today = LocalDate.now()
+                    val upcoming = lectures.filter { event ->
+                        val eventDate = LecturesViewModel.apiDateToLocalDate(event.date)
+                        eventDate == today && !event.startTime.isLecturePassed()
+                    }.sortedBy { it.startTime }
+
+                    _uiState.value = _uiState.value.copy(
+                        upcomingLectures = upcoming.take(2)
+                    )
+                }
+            }
+            launch {
+                mensaRepository.getMensaMenu(site).collect { mensaMenus ->
+                    val today = LocalDate.now()
+                    val todayMenuDay = mensaMenus.firstOrNull()?.menus?.firstOrNull { day ->
+                        dev.dominikstahl.dhbwapp.ui.mensa.MensaViewModel.apiDateToLocalDate(day.date) == today
+                    }
+                    val todayMeals = mutableListOf<MergedMenuItem>()
+                    var closed = false
+                    if (todayMenuDay != null) {
+                        closed = todayMenuDay.closed
+                        if (!closed) {
+                            todayMeals.addAll(groupMenuItems(todayMenuDay.mainCourses.orEmpty()).take(2))
+                        }
+                    }
+                    _uiState.value = _uiState.value.copy(
+                        todayMensaMeals = todayMeals,
+                        mensaClosed = closed
+                    )
+                }
+            }
+            launch {
+                moodleRepository.assignmentsFlow.collect { assignments ->
+                    val now = System.currentTimeMillis() / 1000
+                    val nextTasks = assignments
+                        .filter { !it.isSubmitted && it.dueDate > now }
+                        .sortedBy { it.dueDate }
+                        .take(2)
+                    _uiState.value = _uiState.value.copy(
+                        upcomingMoodleTasks = nextTasks
+                    )
+                }
+            }
+        }
+    }
+
     fun updateParams(newSite: String, newCourse: String) {
         site = newSite
         course = newCourse
         checkSavedDualisCredentials()
+        startFlowCollection()
     }
 
     fun loadDashboardData() {
@@ -103,21 +168,17 @@ class DashboardViewModel(
                 val today = LocalDate.now()
                 val todayStr = today.format(DateTimeFormatter.ISO_LOCAL_DATE)
 
-                // Async fetch all overview info
+                // Trigger network syncs in parallel
                 val lecturesDeferred = async {
-                    if (course.isNotBlank()) {
-                        apiClient.getLecturesForCourse(course, archived = false)
-                    } else {
-                        emptyList()
-                    }
+                    try {
+                        timetableRepository.syncLectures(course)
+                    } catch (_: Exception) {}
                 }
                 
                 val mensaDeferred = async {
-                    if (site.isNotBlank()) {
-                        apiClient.getMensaMenu(site)
-                    } else {
-                        emptyList()
-                    }
+                    try {
+                        mensaRepository.syncMensaMenu(site)
+                    } catch (_: Exception) {}
                 }
 
                 val parkingDeferred = async {
@@ -136,39 +197,14 @@ class DashboardViewModel(
                     }
                 }
 
-                val lectures = try { lecturesDeferred.await() } catch (_: Exception) { emptyList() }
-                val mensaMenus = try { mensaDeferred.await() } catch (_: Exception) { emptyList() }
+                lecturesDeferred.await()
+                mensaDeferred.await()
                 val parking = try { parkingDeferred.await() } catch (_: Exception) { emptyList() }
                 val roomResponse = try { roomsDeferred.await() } catch (_: Exception) { null }
 
-                // Filter upcoming lectures for today/tomorrow
-                val upcoming = lectures.filter { event ->
-                    val eventDate = LecturesViewModel.apiDateToLocalDate(event.date)
-                    eventDate == today && !event.startTime.isLecturePassed()
-                }.sortedBy { it.startTime }
-
-                // Filter today's meals using grouping algorithm
-                val todayMenuDay = mensaMenus.firstOrNull()?.menus?.firstOrNull { day ->
-                    dev.dominikstahl.dhbwapp.ui.mensa.MensaViewModel.apiDateToLocalDate(day.date) == today
-                }
-                val todayMeals = mutableListOf<MergedMenuItem>()
-                var closed = false
-                if (todayMenuDay != null) {
-                    closed = todayMenuDay.closed
-                    if (!closed) {
-                        todayMeals.addAll(groupMenuItems(todayMenuDay.mainCourses.orEmpty()).take(2))
-                    }
-                }
-
-                // Compute room stats
-                val roomStats = roomResponse?.stats
-
                 _uiState.value = _uiState.value.copy(
-                    upcomingLectures = upcoming.take(2),
-                    todayMensaMeals = todayMeals,
-                    mensaClosed = closed,
                     parkingLots = parking,
-                    roomStats = roomStats,
+                    roomStats = roomResponse?.stats,
                     loading = false
                 )
 
@@ -196,6 +232,9 @@ class DashboardViewModel(
     }
 
     class Factory(
+        private val timetableRepository: TimetableRepository,
+        private val mensaRepository: MensaRepository,
+        private val moodleRepository: MoodleRepository,
         private val apiClient: ApiClient,
         private val dualisClient: DualisClient,
         private val credentialsManager: DualisCredentialsManager,
@@ -205,7 +244,17 @@ class DashboardViewModel(
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return DashboardViewModel(apiClient, dualisClient, credentialsManager, userPreferences, site, course) as T
+            return DashboardViewModel(
+                timetableRepository,
+                mensaRepository,
+                moodleRepository,
+                apiClient,
+                dualisClient,
+                credentialsManager,
+                userPreferences,
+                site,
+                course
+            ) as T
         }
     }
 }

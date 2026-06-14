@@ -11,9 +11,16 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import dev.dominikstahl.dhbwapp.MainActivity
 import dev.dominikstahl.dhbwapp.R
+import dev.dominikstahl.dhbwapp.data.local.db.AppDatabase
+import dev.dominikstahl.dhbwapp.data.repository.TimetableRepository
+import dev.dominikstahl.dhbwapp.data.repository.MensaRepository
+import dev.dominikstahl.dhbwapp.data.remote.ApiClient
 import dev.dominikstahl.dhbwapp.data.remote.DualisClient
 import dev.dominikstahl.dhbwapp.data.remote.DualisSemester
 import dev.dominikstahl.dhbwapp.data.remote.DualisSemesterCourse
+import dev.dominikstahl.dhbwapp.data.local.MoodleSessionManager
+import dev.dominikstahl.dhbwapp.data.remote.MoodleClient
+import dev.dominikstahl.dhbwapp.data.repository.MoodleRepository
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
@@ -22,7 +29,7 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-class DualisUpdateWorker(
+class DataSyncWorker(
     context: Context,
     params: WorkerParameters
 ) : CoroutineWorker(context, params) {
@@ -33,10 +40,9 @@ class DualisUpdateWorker(
     }
 
     override suspend fun doWork(): Result {
-        val credentialsManager = DualisCredentialsManager(applicationContext)
-        val creds = credentialsManager.getCredentials() ?: return Result.success()
-
         val userPreferences = UserPreferences(applicationContext)
+        val selectedSite = userPreferences.selectedSite.first()
+        val selectedCourse = userPreferences.selectedCourse.first()
 
         val httpClient = HttpClient {
             install(ContentNegotiation) {
@@ -47,62 +53,112 @@ class DualisUpdateWorker(
             }
         }
 
-        val dualisClient = DualisClient(httpClient)
+        val apiClient = ApiClient(httpClient)
+        val database = AppDatabase.getDatabase(applicationContext)
+        val timetableRepository = TimetableRepository(apiClient, database.lectureDao())
+        val mensaRepository = MensaRepository(apiClient, database.mensaDao())
 
-        try {
-            // 1. Log in
-            val session = dualisClient.login(creds.first, creds.second)
+        var hasFailure = false
 
-            // 2. Get semesters
-            val semesters = dualisClient.getSemesters(session)
-            val updatedSemesters = mutableListOf<DualisSemester>()
-
-            // 3. Get courses for each semester
-            for (sem in semesters) {
-                val courses = dualisClient.getCourses(session, sem.value)
-                updatedSemesters.add(sem.copy(courses = courses))
+        // 1. Sync Timetable if configured
+        if (!selectedCourse.isNullOrBlank()) {
+            try {
+                timetableRepository.syncLectures(selectedCourse)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                hasFailure = true
             }
+        }
 
-            // 4. Retrieve cache
-            val cachedJson = userPreferences.dualisCoursesCache.first()
-            val cachedSemesters = if (!cachedJson.isNullOrBlank()) {
-                try {
-                    Json.decodeFromString<List<DualisSemester>>(cachedJson)
-                } catch (e: Exception) {
+        // 2. Sync Mensa menu if configured
+        if (!selectedSite.isNullOrBlank()) {
+            try {
+                mensaRepository.syncMensaMenu(selectedSite)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                hasFailure = true
+            }
+        }
+
+        // 3. Sync Dualis grades if credentials exist
+        val credentialsManager = DualisCredentialsManager(applicationContext)
+        val creds = credentialsManager.getCredentials()
+        if (creds != null) {
+            val dualisClient = DualisClient(httpClient)
+            try {
+                // Log in
+                val session = dualisClient.login(creds.first, creds.second)
+
+                // Get semesters
+                val semesters = dualisClient.getSemesters(session)
+                val updatedSemesters = mutableListOf<DualisSemester>()
+
+                // Get courses for each semester
+                for (sem in semesters) {
+                    val courses = dualisClient.getCourses(session, sem.value)
+                    updatedSemesters.add(sem.copy(courses = courses))
+                }
+
+                // Retrieve cache
+                val cachedJson = userPreferences.dualisCoursesCache.first()
+                val cachedSemesters = if (!cachedJson.isNullOrBlank()) {
+                    try {
+                        Json.decodeFromString<List<DualisSemester>>(cachedJson)
+                    } catch (e: Exception) {
+                        emptyList()
+                    }
+                } else {
                     emptyList()
                 }
-            } else {
-                emptyList()
-            }
 
-            // 5. Compare & Find changes
-            val changes = findGradeChanges(cachedSemesters, updatedSemesters)
+                // Compare & Find changes
+                val changes = findGradeChanges(cachedSemesters, updatedSemesters)
 
-            // 6. Update cache
-            val newCacheJson = Json.encodeToString(updatedSemesters)
-            userPreferences.setDualisCoursesCache(newCacheJson)
+                // Update cache
+                val newCacheJson = Json.encodeToString(updatedSemesters)
+                userPreferences.setDualisCoursesCache(newCacheJson)
 
-            // 7. Process changes (only if it is not the first sync/missing cache)
-            if (cachedSemesters.isNotEmpty() && changes.isNotEmpty()) {
-                val newestChange = changes.first()
-                val gradeDisplay = if (newestChange.grade.equals("b", ignoreCase = true) || newestChange.grade.equals("bestanden", ignoreCase = true)) {
-                    "✓ Bestanden"
-                } else {
-                    newestChange.grade
+                // Process changes (only if it is not the first sync/missing cache)
+                if (cachedSemesters.isNotEmpty() && changes.isNotEmpty()) {
+                    val newestChange = changes.first()
+                    val gradeDisplay = if (newestChange.grade.equals("b", ignoreCase = true) || newestChange.grade.equals("bestanden", ignoreCase = true)) {
+                        "✓ Bestanden"
+                    } else {
+                        newestChange.grade
+                    }
+                    userPreferences.setNewestGradeInfo("${newestChange.courseName} ($gradeDisplay)")
+
+                    sendNotifications(changes)
                 }
-                userPreferences.setNewestGradeInfo("${newestChange.courseName} ($gradeDisplay)")
 
-                sendNotifications(changes)
+                userPreferences.setLastSyncTime(System.currentTimeMillis())
+            } catch (e: Exception) {
+                e.printStackTrace()
+                hasFailure = true
             }
+        }
 
-            userPreferences.setLastSyncTime(System.currentTimeMillis())
+        // 4. Sync Moodle if session exists
+        val moodleSessionManager = MoodleSessionManager(applicationContext)
+        val moodleSession = moodleSessionManager.getSession()
+        if (moodleSession != null) {
+            val moodleClient = MoodleClient(httpClient)
+            val moodleRepository = MoodleRepository(moodleClient, database.moodleDao())
+            try {
+                moodleRepository.syncMoodle(moodleSession.siteUrl, moodleSession.token, moodleSession.userId)
+                userPreferences.setMoodleLastSyncTime(System.currentTimeMillis())
+            } catch (e: Exception) {
+                e.printStackTrace()
+                hasFailure = true
+            }
+        }
 
-            return Result.success()
-        } catch (e: Exception) {
-            e.printStackTrace()
-            return Result.retry()
-        } finally {
-            httpClient.close()
+        httpClient.close()
+
+        return if (hasFailure) {
+            Result.retry()
+        } else {
+            Result.success()
         }
     }
 

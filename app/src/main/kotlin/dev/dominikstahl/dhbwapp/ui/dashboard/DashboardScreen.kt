@@ -47,6 +47,8 @@ import dev.dominikstahl.dhbwapp.remote.models.ParkingLot
 import dev.dominikstahl.dhbwapp.remote.models.RaplaLectureEvent
 import java.time.LocalDate
 import java.time.OffsetDateTime
+import java.time.Instant
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import dev.dominikstahl.dhbwapp.data.remote.DualisClient
@@ -63,6 +65,10 @@ import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.FactCheck
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.Button
+import dev.dominikstahl.dhbwapp.data.repository.TimetableRepository
+import dev.dominikstahl.dhbwapp.data.repository.MensaRepository
+import dev.dominikstahl.dhbwapp.data.repository.MoodleRepository
+import androidx.compose.material.icons.filled.Assignment
 
 private fun formatTime(time: String): String {
     return try {
@@ -74,6 +80,9 @@ private fun formatTime(time: String): String {
 
 @Composable
 fun DashboardScreen(
+    timetableRepository: TimetableRepository,
+    mensaRepository: MensaRepository,
+    moodleRepository: MoodleRepository,
     apiClient: ApiClient,
     dualisClient: DualisClient,
     credentialsManager: DualisCredentialsManager,
@@ -85,10 +94,21 @@ fun DashboardScreen(
     onNavigateToMensa: () -> Unit,
     onNavigateToParking: () -> Unit,
     onNavigateToRooms: () -> Unit,
-    onNavigateToDualis: () -> Unit
+    onNavigateToDualis: () -> Unit,
+    onNavigateToMoodle: () -> Unit
 ) {
     val viewModel: DashboardViewModel = viewModel(
-        factory = DashboardViewModel.Factory(apiClient, dualisClient, credentialsManager, userPreferences, site, course)
+        factory = DashboardViewModel.Factory(
+            timetableRepository,
+            mensaRepository,
+            moodleRepository,
+            apiClient,
+            dualisClient,
+            credentialsManager,
+            userPreferences,
+            site,
+            course
+        )
     )
 
     LaunchedEffect(site, course) {
@@ -234,6 +254,60 @@ fun DashboardScreen(
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.padding(start = 8.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Moodle Preview Card
+            DashboardPreviewCard(
+                title = "Moodle Aufgaben",
+                icon = Icons.Default.Assignment,
+                onClick = onNavigateToMoodle
+            ) {
+                if (state.upcomingMoodleTasks.isEmpty()) {
+                    Text(
+                        text = "Keine anstehenden Aufgaben in Moodle.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        state.upcomingMoodleTasks.forEach { assignment ->
+                            val formattedDueDate = remember(assignment.dueDate) {
+                                if (assignment.dueDate > 0) {
+                                    val zonedDateTime = Instant.ofEpochSecond(assignment.dueDate).atZone(ZoneId.systemDefault())
+                                    zonedDateTime.format(DateTimeFormatter.ofPattern("EEEE, dd.MM.yyyy HH:mm", Locale.GERMANY))
+                                } else {
+                                    "Kein Abgabedatum"
+                                }
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.AccessTime,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = assignment.name,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = "Fällig: $formattedDueDate",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }

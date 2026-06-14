@@ -64,6 +64,7 @@ import dev.dominikstahl.dhbwapp.remote.models.MenuItem
 import java.text.NumberFormat
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import dev.dominikstahl.dhbwapp.data.repository.MensaRepository
 
 
 private val priceFormat = NumberFormat.getCurrencyInstance(Locale.GERMANY)
@@ -121,12 +122,12 @@ private fun FilterRow(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MensaScreen(
-    apiClient: ApiClient,
+    mensaRepository: MensaRepository,
     site: String,
     userType: String?,
 ) {
     val viewModel: MensaViewModel = viewModel(
-        factory = MensaViewModel.Factory(apiClient, site),
+        factory = MensaViewModel.Factory(mensaRepository, site),
     )
     LaunchedEffect(site) {
         viewModel.setSite(site)

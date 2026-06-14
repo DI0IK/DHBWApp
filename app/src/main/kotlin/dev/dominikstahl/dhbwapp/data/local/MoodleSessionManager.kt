@@ -1,7 +1,3 @@
-// Portions of this file are derived from DHBWorld (https://github.com/heinf/DHBWorld)
-// Copyright (c) 2022 Linus Pust, Daria Kodolova, Christian Zäske
-// Licensed under the Apache License, Version 2.0
-
 package dev.dominikstahl.dhbwapp.data.local
 
 import android.content.Context
@@ -14,17 +10,17 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-class DualisCredentialsManager(context: Context) {
+class MoodleSessionManager(context: Context) {
 
-    private val sharedPreferences = context.getSharedPreferences("Dualis", Context.MODE_PRIVATE)
+    private val sharedPreferences = context.getSharedPreferences("Moodle", Context.MODE_PRIVATE)
 
     companion object {
-        private const val KEY_ALIAS = "dualisCredentials"
+        private const val KEY_ALIAS = "moodleSession"
         private const val ANDROID_KEYSTORE = "AndroidKeyStore"
         private const val AES_GCM_NOPADDING = "AES/GCM/NoPadding"
         
-        private const val PREF_IV = "dualisIV"
-        private const val PREF_CREDENTIALS = "dualisCredentials"
+        private const val PREF_IV = "moodleIV"
+        private const val PREF_SESSION = "moodleSession"
     }
 
     private fun getSecretKey(): SecretKey {
@@ -49,31 +45,37 @@ class DualisCredentialsManager(context: Context) {
         return keyGenerator.generateKey()
     }
 
-    fun saveCredentials(email: String, password: String) {
+    fun saveSession(token: String, userId: Int, siteUrl: String) {
         try {
             val key = getSecretKey()
             val cipher = Cipher.getInstance(AES_GCM_NOPADDING)
             cipher.init(Cipher.ENCRYPT_MODE, key)
 
-            val emailBase64 = Base64.encodeToString(email.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
-            val passwordBase64 = Base64.encodeToString(password.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
-            val payload = "$emailBase64:$passwordBase64"
+            val tokenBase64 = Base64.encodeToString(token.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+            val siteUrlBase64 = Base64.encodeToString(siteUrl.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+            val payload = "$tokenBase64:$userId:$siteUrlBase64"
 
             val ciphertext = cipher.doFinal(payload.toByteArray(Charsets.UTF_8))
             val iv = cipher.iv
 
             sharedPreferences.edit()
                 .putString(PREF_IV, Base64.encodeToString(iv, Base64.NO_WRAP))
-                .putString(PREF_CREDENTIALS, Base64.encodeToString(ciphertext, Base64.NO_WRAP))
+                .putString(PREF_SESSION, Base64.encodeToString(ciphertext, Base64.NO_WRAP))
                 .apply()
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
 
-    fun getCredentials(): Pair<String, String>? {
+    data class MoodleSession(
+        val token: String,
+        val userId: Int,
+        val siteUrl: String
+    )
+
+    fun getSession(): MoodleSession? {
         val ivBase64 = sharedPreferences.getString(PREF_IV, null) ?: return null
-        val ciphertextBase64 = sharedPreferences.getString(PREF_CREDENTIALS, null) ?: return null
+        val ciphertextBase64 = sharedPreferences.getString(PREF_SESSION, null) ?: return null
 
         try {
             val key = getSecretKey()
@@ -87,10 +89,11 @@ class DualisCredentialsManager(context: Context) {
             val decryptedBytes = cipher.doFinal(ciphertext)
             val payload = String(decryptedBytes, Charsets.UTF_8)
             val parts = payload.split(":")
-            if (parts.size == 2) {
-                val email = String(Base64.decode(parts[0], Base64.NO_WRAP), Charsets.UTF_8)
-                val password = String(Base64.decode(parts[1], Base64.NO_WRAP), Charsets.UTF_8)
-                return Pair(email, password)
+            if (parts.size == 3) {
+                val token = String(Base64.decode(parts[0], Base64.NO_WRAP), Charsets.UTF_8)
+                val userId = parts[1].toInt()
+                val siteUrl = String(Base64.decode(parts[2], Base64.NO_WRAP), Charsets.UTF_8)
+                return MoodleSession(token, userId, siteUrl)
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -98,10 +101,10 @@ class DualisCredentialsManager(context: Context) {
         return null
     }
 
-    fun clearCredentials() {
+    fun clearSession() {
         sharedPreferences.edit()
             .remove(PREF_IV)
-            .remove(PREF_CREDENTIALS)
+            .remove(PREF_SESSION)
             .apply()
     }
 }

@@ -13,6 +13,9 @@ import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneId
 
+import dev.dominikstahl.dhbwapp.data.repository.MensaRepository
+import kotlinx.coroutines.Job
+
 data class MensaUiState(
     val menus: List<MensaResponse> = emptyList(),
     val selectedDayIndex: Int = 0,
@@ -21,7 +24,7 @@ data class MensaUiState(
 )
 
 class MensaViewModel(
-    private val apiClient: ApiClient,
+    private val mensaRepository: MensaRepository,
     private var site: String,
 ) : ViewModel() {
 
@@ -30,20 +33,38 @@ class MensaViewModel(
 
     private var currentMenuDays: List<MenuDay> = emptyList()
 
+    private var collectionJob: Job? = null
+
+    init {
+        startFlowCollection()
+    }
+
     fun setSite(newSite: String) {
         site = newSite
+        startFlowCollection()
+    }
+
+    private fun startFlowCollection() {
+        collectionJob?.cancel()
+        if (site.isBlank()) return
+        collectionJob = viewModelScope.launch {
+            mensaRepository.getMensaMenu(site).collect { response ->
+                currentMenuDays = response.firstOrNull()?.menus ?: emptyList()
+                val todayIndex = findTodayIndex(currentMenuDays)
+                _uiState.value = MensaUiState(menus = response, selectedDayIndex = todayIndex)
+            }
+        }
     }
 
     fun loadMenus() {
         viewModelScope.launch {
-            _uiState.value = MensaUiState(loading = true)
+            _uiState.value = _uiState.value.copy(loading = true)
             try {
-                val response = apiClient.getMensaMenu(site)
-                currentMenuDays = response.firstOrNull()?.menus ?: emptyList()
-                val todayIndex = findTodayIndex(currentMenuDays)
-                _uiState.value = MensaUiState(menus = response, selectedDayIndex = todayIndex)
+                mensaRepository.syncMensaMenu(site)
+                _uiState.value = _uiState.value.copy(loading = false)
             } catch (e: Exception) {
-                _uiState.value = MensaUiState(
+                _uiState.value = _uiState.value.copy(
+                    loading = false,
                     error = e.message ?: "Fehler beim Laden der Menüs",
                 )
             }
@@ -89,12 +110,12 @@ class MensaViewModel(
     }
 
     class Factory(
-        private val apiClient: ApiClient,
+        private val mensaRepository: MensaRepository,
         private val site: String,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return MensaViewModel(apiClient, site) as T
+            return MensaViewModel(mensaRepository, site) as T
         }
     }
 }

@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -41,6 +42,13 @@ import dev.dominikstahl.dhbwapp.ui.lectures.LecturesScreen
 import dev.dominikstahl.dhbwapp.ui.directory.DirectoryScreen
 import dev.dominikstahl.dhbwapp.ui.directory.EntityTimetableScreen
 import dev.dominikstahl.dhbwapp.ui.dualis.DualisScreen
+import dev.dominikstahl.dhbwapp.data.remote.MoodleClient
+import dev.dominikstahl.dhbwapp.data.local.MoodleSessionManager
+import dev.dominikstahl.dhbwapp.data.repository.MoodleRepository
+import dev.dominikstahl.dhbwapp.ui.moodle.MoodleScreen
+import dev.dominikstahl.dhbwapp.ui.moodle.MoodleLoginScreen
+import dev.dominikstahl.dhbwapp.ui.moodle.MoodleCourseDetailScreen
+import dev.dominikstahl.dhbwapp.ui.moodle.MoodleViewModel
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.launch
 
@@ -57,6 +65,12 @@ fun DhbwApp(httpClient: HttpClient, userPreferences: UserPreferences) {
     val apiClient = remember { ApiClient(httpClient) }
     val dualisClient = remember { DualisClient(httpClient) }
     val dualisCredentialsManager = remember { DualisCredentialsManager(context) }
+    val database = remember { dev.dominikstahl.dhbwapp.data.local.db.AppDatabase.getDatabase(context) }
+    val timetableRepository = remember { dev.dominikstahl.dhbwapp.data.repository.TimetableRepository(apiClient, database.lectureDao()) }
+    val mensaRepository = remember { dev.dominikstahl.dhbwapp.data.repository.MensaRepository(apiClient, database.mensaDao()) }
+    val moodleClient = remember { MoodleClient(httpClient) }
+    val moodleSessionManager = remember { MoodleSessionManager(context) }
+    val moodleRepository = remember { MoodleRepository(moodleClient, database.moodleDao()) }
     val scope = rememberCoroutineScope()
 
     val mainRoutes = listOf(Screen.Dashboard.route, Screen.Mensa.route, Screen.Lectures.route, Screen.More.route)
@@ -66,7 +80,10 @@ fun DhbwApp(httpClient: HttpClient, userPreferences: UserPreferences) {
         Screen.Settings.route,
         Screen.Directory.route,
         Screen.EntityTimetable.route,
-        Screen.Dualis.route
+        Screen.Dualis.route,
+        Screen.Moodle.route,
+        Screen.MoodleLogin.route,
+        Screen.MoodleCourseDetail.route
     )
     val showBottomBar = selectedSite != null && currentRoute in mainRoutes + detailRoutes
 
@@ -124,6 +141,9 @@ fun DhbwApp(httpClient: HttpClient, userPreferences: UserPreferences) {
                 }
                 composable(Screen.Dashboard.route) {
                     DashboardScreen(
+                        timetableRepository = timetableRepository,
+                        mensaRepository = mensaRepository,
+                        moodleRepository = moodleRepository,
                         apiClient = apiClient,
                         dualisClient = dualisClient,
                         credentialsManager = dualisCredentialsManager,
@@ -135,26 +155,27 @@ fun DhbwApp(httpClient: HttpClient, userPreferences: UserPreferences) {
                         onNavigateToMensa = { navController.navigate(Screen.Mensa.route) },
                         onNavigateToParking = { navController.navigate(Screen.Parking.route) },
                         onNavigateToRooms = { navController.navigate(Screen.Rooms.route) },
-                        onNavigateToDualis = { navController.navigate(Screen.Dualis.route) }
+                        onNavigateToDualis = { navController.navigate(Screen.Dualis.route) },
+                        onNavigateToMoodle = { navController.navigate(Screen.Moodle.route) }
                     )
                 }
                 composable(Screen.Mensa.route) {
                     MensaScreen(
-                        apiClient = apiClient,
+                        mensaRepository = mensaRepository,
                         site = selectedSite ?: "",
                         userType = currentUserType,
                     )
                 }
                 composable(Screen.Lectures.route) {
                     LecturesScreen(
-                        apiClient = apiClient,
+                        timetableRepository = timetableRepository,
                         course = selectedCourse ?: "",
                         onEntityClick = { type, name ->
                             navController.navigate("entity_timetable/$type/$name")
                         }
                     )
                 }
-                composable(Screen.More.route) {
+                 composable(Screen.More.route) {
                     MoreScreen(
                         onParkingClick = {
                             navController.navigate(Screen.Parking.route)
@@ -170,6 +191,9 @@ fun DhbwApp(httpClient: HttpClient, userPreferences: UserPreferences) {
                         },
                         onDualisClick = {
                             navController.navigate(Screen.Dualis.route)
+                        },
+                        onMoodleClick = {
+                            navController.navigate(Screen.Moodle.route)
                         }
                     )
                 }
@@ -178,6 +202,62 @@ fun DhbwApp(httpClient: HttpClient, userPreferences: UserPreferences) {
                         dualisClient = dualisClient,
                         credentialsManager = dualisCredentialsManager,
                         userPreferences = userPreferences,
+                        onBackClick = { navController.popBackStack() }
+                    )
+                }
+                composable(Screen.Moodle.route) {
+                    val moodleViewModel: MoodleViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+                        factory = MoodleViewModel.Factory(
+                            moodleSessionManager, moodleRepository, userPreferences
+                        )
+                    )
+                    val uiState by moodleViewModel.uiState.collectAsState()
+                    if (!uiState.isLoggedIn) {
+                        LaunchedEffect(Unit) {
+                            navController.navigate(Screen.MoodleLogin.route) {
+                                popUpTo(Screen.Moodle.route) { inclusive = true }
+                            }
+                        }
+                    } else {
+                        MoodleScreen(
+                            viewModel = moodleViewModel,
+                            onBackClick = { navController.popBackStack() },
+                            onNavigateToLogin = {
+                                navController.navigate(Screen.MoodleLogin.route)
+                            },
+                            onCourseClick = { courseId ->
+                                navController.navigate("moodle_course_detail/$courseId")
+                            }
+                        )
+                    }
+                }
+                composable(Screen.MoodleLogin.route) {
+                    val moodleViewModel: MoodleViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+                        factory = MoodleViewModel.Factory(
+                            moodleSessionManager, moodleRepository, userPreferences
+                        )
+                    )
+                    MoodleLoginScreen(
+                        moodleClient = moodleClient,
+                        viewModel = moodleViewModel,
+                        onBackClick = { navController.popBackStack() },
+                        onLoginSuccess = {
+                            navController.navigate(Screen.Moodle.route) {
+                                popUpTo(Screen.MoodleLogin.route) { inclusive = true }
+                            }
+                        }
+                    )
+                }
+                composable(Screen.MoodleCourseDetail.route) { backStackEntry ->
+                    val courseId = backStackEntry.arguments?.getString("courseId")?.toIntOrNull() ?: 0
+                    val moodleViewModel: MoodleViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+                        factory = MoodleViewModel.Factory(
+                            moodleSessionManager, moodleRepository, userPreferences
+                        )
+                    )
+                    MoodleCourseDetailScreen(
+                        courseId = courseId,
+                        viewModel = moodleViewModel,
                         onBackClick = { navController.popBackStack() }
                     )
                 }

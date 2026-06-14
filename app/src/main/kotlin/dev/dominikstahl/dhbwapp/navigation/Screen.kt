@@ -12,4 +12,7 @@ sealed class Screen(val route: String) {
     data object Directory : Screen("directory")
     data object EntityTimetable : Screen("entity_timetable/{type}/{name}")
     data object Dualis : Screen("dualis")
+    data object Moodle : Screen("moodle")
+    data object MoodleLogin : Screen("moodle_login")
+    data object MoodleCourseDetail : Screen("moodle_course_detail/{courseId}")
 }
