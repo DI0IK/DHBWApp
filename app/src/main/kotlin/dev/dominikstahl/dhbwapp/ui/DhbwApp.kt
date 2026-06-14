@@ -81,9 +81,8 @@ fun DhbwApp(httpClient: HttpClient, userPreferences: UserPreferences) {
                                  onClick = {
                                      if (currentRoute != item.screen.route) {
                                          navController.navigate(item.screen.route) {
-                                             popUpTo(Screen.Dashboard.route) { saveState = true }
+                                             popUpTo(Screen.Dashboard.route)
                                              launchSingleTop = true
-                                             restoreState = true
                                          }
                                      }
                                  },
