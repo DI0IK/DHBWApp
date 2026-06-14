@@ -58,11 +58,6 @@ fun DirectoryScreen(
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBar(
             title = { Text("Verzeichnis", fontWeight = FontWeight.Bold) },
-            navigationIcon = {
-                IconButton(onClick = onBackClick) {
-                    Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
-                }
-            },
             windowInsets = androidx.compose.foundation.layout.WindowInsets(0.dp)
         )
 

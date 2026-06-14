@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import dev.dominikstahl.dhbwapp.data.local.DualisCredentialsManager
+import dev.dominikstahl.dhbwapp.data.local.UserPreferences
 import dev.dominikstahl.dhbwapp.data.remote.DualisClient
 import dev.dominikstahl.dhbwapp.data.remote.DualisDocument
 import dev.dominikstahl.dhbwapp.data.remote.DualisGPA
@@ -14,6 +15,7 @@ import dev.dominikstahl.dhbwapp.data.remote.DualisSession
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import androidx.work.WorkManager
 
 data class DualisUiState(
     val isLoggedIn: Boolean = false,
@@ -26,11 +28,16 @@ data class DualisUiState(
     val overallData: DualisOverallData? = null,
     val gpa: DualisGPA? = null,
     val documents: List<DualisDocument> = emptyList(),
+    val isLocked: Boolean = false,
+    val workerState: String? = null,
+    val lastSyncTime: Long? = null,
 )
 
 class DualisViewModel(
     private val dualisClient: DualisClient,
-    private val credentialsManager: DualisCredentialsManager
+    private val credentialsManager: DualisCredentialsManager,
+    private val userPreferences: UserPreferences,
+    private val workManager: WorkManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DualisUiState())
@@ -39,13 +46,31 @@ class DualisViewModel(
     private var session: DualisSession? = null
 
     init {
-        checkSavedCredentialsAndAutoLogin()
+        checkSavedCredentials()
+        viewModelScope.launch {
+            workManager.getWorkInfosForUniqueWorkFlow("DualisUpdateWork").collect { workInfos ->
+                val stateStr = workInfos.firstOrNull()?.state?.name ?: "Inaktiv"
+                _uiState.value = _uiState.value.copy(workerState = stateStr)
+            }
+        }
+        viewModelScope.launch {
+            userPreferences.lastSyncTime.collect { time ->
+                _uiState.value = _uiState.value.copy(lastSyncTime = time)
+            }
+        }
     }
 
-    private fun checkSavedCredentialsAndAutoLogin() {
+    private fun checkSavedCredentials() {
         val creds = credentialsManager.getCredentials()
         if (creds != null) {
-            _uiState.value = _uiState.value.copy(isAutoLoggingIn = true, loading = true)
+            _uiState.value = _uiState.value.copy(isLocked = true)
+        }
+    }
+
+    fun unlockAndLogin() {
+        val creds = credentialsManager.getCredentials()
+        if (creds != null) {
+            _uiState.value = _uiState.value.copy(isLocked = false, isAutoLoggingIn = true, loading = true)
             viewModelScope.launch {
                 try {
                     val newSession = dualisClient.login(creds.first, creds.second)
@@ -93,6 +118,9 @@ class DualisViewModel(
         credentialsManager.clearCredentials()
         session = null
         _uiState.value = DualisUiState()
+        viewModelScope.launch {
+            userPreferences.clearDualisCache()
+        }
     }
 
     fun loadData() {
@@ -195,11 +223,13 @@ class DualisViewModel(
 
     class Factory(
         private val dualisClient: DualisClient,
-        private val credentialsManager: DualisCredentialsManager
+        private val credentialsManager: DualisCredentialsManager,
+        private val userPreferences: UserPreferences,
+        private val workManager: WorkManager
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return DualisViewModel(dualisClient, credentialsManager) as T
+            return DualisViewModel(dualisClient, credentialsManager, userPreferences, workManager) as T
         }
     }
 }

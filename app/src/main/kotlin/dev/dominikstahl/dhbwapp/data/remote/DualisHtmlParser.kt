@@ -20,7 +20,6 @@ object DualisHtmlParser {
 
     fun parseCourses(html: String): List<DualisSemesterCourse> {
         val document = Jsoup.parse(html)
-        // Usually, the course list is in the first table with class "nb.list" or similar
         val rows = document.select("table.nb.list").firstOrNull()?.select("tbody tr") ?: emptyList()
         val courses = mutableListOf<DualisSemesterCourse>()
 

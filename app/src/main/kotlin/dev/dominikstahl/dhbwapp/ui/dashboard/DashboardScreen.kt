@@ -49,19 +49,38 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+import dev.dominikstahl.dhbwapp.data.remote.DualisClient
+import dev.dominikstahl.dhbwapp.data.local.DualisCredentialsManager
+import dev.dominikstahl.dhbwapp.data.local.UserPreferences
+import androidx.biometric.BiometricPrompt
+import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.FactCheck
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material3.Button
+
 @Composable
 fun DashboardScreen(
     apiClient: ApiClient,
+    dualisClient: DualisClient,
+    credentialsManager: DualisCredentialsManager,
+    userPreferences: UserPreferences,
     site: String,
     course: String,
     userType: String?,
     onNavigateToTimetable: () -> Unit,
     onNavigateToMensa: () -> Unit,
     onNavigateToParking: () -> Unit,
-    onNavigateToRooms: () -> Unit
+    onNavigateToRooms: () -> Unit,
+    onNavigateToDualis: () -> Unit
 ) {
     val viewModel: DashboardViewModel = viewModel(
-        factory = DashboardViewModel.Factory(apiClient, site, course)
+        factory = DashboardViewModel.Factory(apiClient, dualisClient, credentialsManager, userPreferences, site, course)
     )
 
     LaunchedEffect(site, course) {
@@ -70,6 +89,26 @@ fun DashboardScreen(
     }
 
     val state by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+    var biometricError by remember { mutableStateOf<String?>(null) }
+
+    val triggerBiometric = {
+        val activity = context as? FragmentActivity
+        if (activity != null) {
+            showBiometricPrompt(
+                activity = activity,
+                onSuccess = {
+                    biometricError = null
+                    viewModel.unlockDualisAndLoadData()
+                },
+                onError = { error ->
+                    biometricError = error
+                }
+            )
+        } else {
+            viewModel.unlockDualisAndLoadData()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -292,8 +331,174 @@ fun DashboardScreen(
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 5. Dualis Noten Preview Card
+            DashboardPreviewCard(
+                title = "Dualis Noten",
+                icon = Icons.Default.FactCheck,
+                onClick = {
+                    if (state.dualisUnlocked || !state.dualisCredentialsExist) {
+                        onNavigateToDualis()
+                    } else {
+                        triggerBiometric()
+                    }
+                }
+            ) {
+                when {
+                    !state.dualisCredentialsExist -> {
+                        Text(
+                            text = "Melden Sie sich bei Dualis an, um Ihre Noten und GPAs hier zu sehen.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    state.dualisLoading -> {
+                        Box(modifier = Modifier.fillMaxWidth().height(60.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        }
+                    }
+                    !state.dualisUnlocked -> {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { triggerBiometric() }
+                                .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(12.dp))
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = "Gesperrt",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(32.dp)
+                            )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column {
+                                Text(
+                                    text = "Dualis-Daten gesperrt",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Tippen, um mit Biometrie freizuschalten",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                if (biometricError != null) {
+                                    Text(
+                                        text = biometricError!!,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.error,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    state.dualisError != null -> {
+                        Text(
+                            text = state.dualisError!!,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    else -> {
+                        val gpa = state.dualisGpa
+                        if (state.dualisUnlocked) {
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                if (gpa != null) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(24.dp)
+                                    ) {
+                                        Column {
+                                            Text(
+                                                text = "Gesamt-GPA",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Text(
+                                                text = gpa.totalGPA,
+                                                style = MaterialTheme.typography.titleLarge,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                        Column {
+                                            Text(
+                                                text = "Hauptfach-GPA",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Text(
+                                                text = gpa.majorCourseGPA,
+                                                style = MaterialTheme.typography.titleLarge,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                    }
+                                }
+                                if (state.dualisNewestGrade != null) {
+                                    Column {
+                                        Text(
+                                            text = "Neueste Note",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            text = state.dualisNewestGrade!!,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
+}
+
+private fun showBiometricPrompt(
+    activity: FragmentActivity,
+    onSuccess: () -> Unit,
+    onError: (String) -> Unit
+) {
+    val executor = ContextCompat.getMainExecutor(activity)
+    val biometricPrompt = BiometricPrompt(
+        activity,
+        executor,
+        object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                super.onAuthenticationError(errorCode, errString)
+                onError(errString.toString())
+            }
+
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                super.onAuthenticationSucceeded(result)
+                onSuccess()
+            }
+
+            override fun onAuthenticationFailed() {
+                super.onAuthenticationFailed()
+                onError("Authentifizierung fehlgeschlagen")
+            }
+        }
+    )
+
+    val promptInfo = BiometricPrompt.PromptInfo.Builder()
+        .setTitle("Dualis freischalten")
+        .setSubtitle("Authentifizieren Sie sich mit Ihren biometrischen Daten")
+        .setNegativeButtonText("Abbrechen")
+        .build()
+
+    biometricPrompt.authenticate(promptInfo)
 }
 
 @Composable

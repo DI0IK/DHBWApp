@@ -195,6 +195,8 @@ dependencies {
     debugImplementation(libs.compose.ui.tooling)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.biometric)
+    implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.material)
     implementation(libs.ktor.client.android)
     implementation(libs.ktor.client.content.negotiation)

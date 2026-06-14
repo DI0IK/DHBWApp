@@ -125,13 +125,17 @@ fun DhbwApp(httpClient: HttpClient, userPreferences: UserPreferences) {
                 composable(Screen.Dashboard.route) {
                     DashboardScreen(
                         apiClient = apiClient,
+                        dualisClient = dualisClient,
+                        credentialsManager = dualisCredentialsManager,
+                        userPreferences = userPreferences,
                         site = selectedSite ?: "",
                         course = selectedCourse ?: "",
                         userType = currentUserType,
                         onNavigateToTimetable = { navController.navigate(Screen.Lectures.route) },
                         onNavigateToMensa = { navController.navigate(Screen.Mensa.route) },
                         onNavigateToParking = { navController.navigate(Screen.Parking.route) },
-                        onNavigateToRooms = { navController.navigate(Screen.Rooms.route) }
+                        onNavigateToRooms = { navController.navigate(Screen.Rooms.route) },
+                        onNavigateToDualis = { navController.navigate(Screen.Dualis.route) }
                     )
                 }
                 composable(Screen.Mensa.route) {
@@ -173,6 +177,7 @@ fun DhbwApp(httpClient: HttpClient, userPreferences: UserPreferences) {
                     DualisScreen(
                         dualisClient = dualisClient,
                         credentialsManager = dualisCredentialsManager,
+                        userPreferences = userPreferences,
                         onBackClick = { navController.popBackStack() }
                     )
                 }

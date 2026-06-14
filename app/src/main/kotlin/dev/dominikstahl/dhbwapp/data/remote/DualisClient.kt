@@ -27,17 +27,25 @@ class DualisClient(private val httpClient: HttpClient) {
             throw Exception("Dualis Server antwortete mit Status: ${response.status.value}")
         }
 
-        // Get Cookies
         val cookieHeaders = response.headers.getAll(HttpHeaders.SetCookie) ?: emptyList()
-        val cookies = cookieHeaders.map { it.substringBefore(";") }
+        val cookies = cookieHeaders.map { raw ->
+            val nv = raw.substringBefore(";")
+            val eqIdx = nv.indexOf('=')
+            if (eqIdx >= 0) {
+                nv.substring(0, eqIdx).trim() + "=" + nv.substring(eqIdx + 1).trim()
+            } else {
+                nv.trim()
+            }
+        }
         if (cookies.isEmpty()) {
             throw Exception("Login fehlgeschlagen: Keine Session-Cookies erhalten.")
         }
 
-        // Get REFRESH header
         val refreshHeader = response.headers["Refresh"] 
             ?: response.headers["refresh"]
-            ?: throw Exception("Login fehlgeschlagen: Ungültige Antwort (kein Refresh-Header).")
+        if (refreshHeader == null) {
+            throw Exception("Login fehlgeschlagen: Ungültige Antwort (kein Refresh-Header).")
+        }
 
         // Parse refreshHeader for arguments:
         // 0; URL=/scripts/mgrqispi.dll?APPNAME=CampusNet&PRGNAME=COURSERESULTS&ARGUMENTS=-N000000000000000,-N000019,-N000000000000000,-N000324,-N000324,-N000324
@@ -99,13 +107,9 @@ class DualisClient(private val httpClient: HttpClient) {
             throw Exception("Fehler beim Laden von Dualis: Status ${response.status.value}")
         }
 
-        // Read raw bytes and decode with ISO-8859-1 (as requested by the guide)
         val bytes = response.readBytes()
         val rawHtml = String(bytes, Charset.forName("ISO-8859-1"))
         
-        // As per guide: utf8String = new String(rawResponse.getBytes(ISO_8859_1), UTF_8)
-        // If the string was already loaded, converting from ISO-8859-1 bytes back to UTF-8
-        // resolves character issues. Let's do that:
         return String(rawHtml.toByteArray(Charset.forName("ISO-8859-1")), Charsets.UTF_8)
     }
 

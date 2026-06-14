@@ -18,6 +18,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -34,33 +35,84 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.dominikstahl.dhbwapp.data.local.DualisCredentialsManager
+import dev.dominikstahl.dhbwapp.data.local.UserPreferences
 import dev.dominikstahl.dhbwapp.data.remote.DualisClient
 import dev.dominikstahl.dhbwapp.data.remote.DualisDocument
 import dev.dominikstahl.dhbwapp.data.remote.DualisOverallCourse
 import dev.dominikstahl.dhbwapp.data.remote.DualisSemesterCourse
+import androidx.biometric.BiometricPrompt
+import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.work.WorkManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DualisScreen(
     dualisClient: DualisClient,
     credentialsManager: DualisCredentialsManager,
+    userPreferences: UserPreferences,
     onBackClick: () -> Unit,
 ) {
+    val context = LocalContext.current
     val viewModel: DualisViewModel = viewModel(
-        factory = DualisViewModel.Factory(dualisClient, credentialsManager)
+        factory = DualisViewModel.Factory(
+            dualisClient = dualisClient,
+            credentialsManager = credentialsManager,
+            userPreferences = userPreferences,
+            workManager = WorkManager.getInstance(context)
+        )
     )
     val state by viewModel.uiState.collectAsState()
-    val context = LocalContext.current
+    
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { _ -> }
+
+    LaunchedEffect(state.isLoggedIn) {
+        if (state.isLoggedIn && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    context,
+                    android.Manifest.permission.POST_NOTIFICATIONS
+                ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                permissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+
+    var biometricError by remember { mutableStateOf<String?>(null) }
+
+    val triggerBiometric = {
+        val activity = context as? FragmentActivity
+        if (activity != null) {
+            showBiometricPrompt(
+                activity = activity,
+                onSuccess = {
+                    biometricError = null
+                    viewModel.unlockAndLogin()
+                },
+                onError = { error ->
+                    biometricError = error
+                }
+            )
+        } else {
+            viewModel.unlockAndLogin()
+        }
+    }
+
+    LaunchedEffect(state.isLocked) {
+        if (state.isLocked) {
+            triggerBiometric()
+        }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Dualis Noten", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
-                    }
-                },
+                windowInsets = WindowInsets(0.dp),
                 actions = {
                     if (state.isLoggedIn) {
                         IconButton(onClick = { viewModel.logout() }) {
@@ -77,6 +129,12 @@ fun DualisScreen(
                 .padding(innerPadding)
         ) {
             when {
+                state.isLocked -> {
+                    DualisLockedView(
+                        onUnlockClick = { triggerBiometric() },
+                        errorMessage = biometricError
+                    )
+                }
                 state.isAutoLoggingIn -> {
                     Column(
                         modifier = Modifier.fillMaxSize(),
@@ -229,7 +287,50 @@ fun DualisDashboard(
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("Noten", "Module & GPA", "Dokumente")
 
+    val formattedTime = remember(state.lastSyncTime) {
+        if (state.lastSyncTime != null) {
+            val instant = java.time.Instant.ofEpochMilli(state.lastSyncTime)
+            val dateTime = java.time.LocalDateTime.ofInstant(instant, java.time.ZoneId.systemDefault())
+            dateTime.format(java.time.format.DateTimeFormatter.ofPattern("dd.MM. HH:mm"))
+        } else {
+            "Nie"
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
+        if (state.workerState != null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .background(
+                                color = if (state.workerState == "RUNNING") MaterialTheme.colorScheme.primary else Color(0xFF4CAF50),
+                                shape = CircleShape
+                            )
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Hintergrund-Sync: ${if (state.workerState == "RUNNING") "Läuft..." else "Aktiv"}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Text(
+                    text = "Letzter Sync: $formattedTime",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
         TabRow(
             selectedTabIndex = selectedTab,
             containerColor = MaterialTheme.colorScheme.surface,
@@ -311,6 +412,8 @@ fun GradesTab(
             val semester = state.semesters.getOrNull(state.selectedSemesterIndex)
             val courses = semester?.courses ?: emptyList()
 
+            var selectedCourse by remember { mutableStateOf<DualisSemesterCourse?>(null) }
+
             if (courses.isEmpty() && state.loading) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
@@ -331,10 +434,21 @@ fun GradesTab(
                     itemsIndexed(courses) { courseIdx, course ->
                         CourseGradeCard(
                             course = course,
-                            onExpand = { onLoadExams(state.selectedSemesterIndex, courseIdx) }
+                            onClick = {
+                                selectedCourse = course
+                                onLoadExams(state.selectedSemesterIndex, courseIdx)
+                            }
                         )
                     }
                 }
+            }
+
+            if (selectedCourse != null) {
+                val currentCourse = semester?.courses?.find { it.number == selectedCourse!!.number } ?: selectedCourse!!
+                CourseDetailBottomSheet(
+                    course = currentCourse,
+                    onDismissRequest = { selectedCourse = null }
+                )
             }
         }
     }
@@ -343,111 +457,174 @@ fun GradesTab(
 @Composable
 fun CourseGradeCard(
     course: DualisSemesterCourse,
-    onExpand: () -> Unit
+    onClick: () -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
-
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = course.examLink != null) {
-                expanded = !expanded
-                if (expanded) {
-                    onExpand()
-                }
-            },
+            .clickable(enabled = course.examLink != null, onClick = onClick),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = course.number,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = course.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Credits: ${course.credits}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            // Highlighted Grade Badge
+            GradeBadge(grade = course.grade)
+
+            if (course.examLink != null) {
+                Spacer(modifier = Modifier.width(8.dp))
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = "Details anzeigen",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CourseDetailBottomSheet(
+    course: DualisSemesterCourse,
+    onDismissRequest: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    
+    ModalBottomSheet(
+        onDismissRequest = onDismissRequest,
+        sheetState = sheetState,
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(vertical = 12.dp)
+                    .width(40.dp)
+                    .height(4.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                        shape = RoundedCornerShape(2.dp)
+                    )
+            )
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 8.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            Text(
+                text = course.number,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = course.name,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(vertical = 4.dp)
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement = Arrangement.spacedBy(24.dp)
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                Column {
                     Text(
-                        text = course.number,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold
+                        text = "Credits",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = course.name,
+                        text = course.credits.ifEmpty { "N/A" },
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
+                }
+                Column {
                     Text(
-                        text = "Credits: ${course.credits}",
-                        style = MaterialTheme.typography.bodySmall,
+                        text = "Note",
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                }
-
-                Spacer(modifier = Modifier.width(16.dp))
-
-                // Highlighted Grade Badge
-                GradeBadge(grade = course.grade)
-
-                if (course.examLink != null) {
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Icon(
-                        imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = "Details anzeigen",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    GradeBadge(grade = course.grade)
                 }
             }
-
-            AnimatedVisibility(
-                visible = expanded,
-                enter = expandVertically(),
-                exit = shrinkVertically()
-            ) {
-                Column(modifier = Modifier.padding(top = 16.dp)) {
-                    HorizontalDivider()
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "Prüfungsleistungen:",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    if (course.exams.isEmpty()) {
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            Text(
+                text = "Prüfungsleistungen",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            if (course.exams.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    course.exams.forEach { exam ->
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    MaterialTheme.colorScheme.surfaceContainerLow,
+                                    RoundedCornerShape(12.dp)
+                                )
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                        }
-                    } else {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            course.exams.forEach { exam ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .background(
-                                            MaterialTheme.colorScheme.surfaceContainerLow,
-                                            RoundedCornerShape(8.dp)
-                                        )
-                                        .padding(12.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = exam.topic,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    GradeBadge(grade = exam.grade, small = true)
-                                }
-                            }
+                            Text(
+                                text = exam.topic,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            GradeBadge(grade = exam.grade, small = true)
                         }
                     }
                 }
             }
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }
@@ -455,15 +632,17 @@ fun CourseGradeCard(
 @Composable
 fun GradeBadge(grade: String, small: Boolean = false) {
     val cleanGrade = grade.trim()
-    val isPassed = !cleanGrade.contains("5.0") && cleanGrade.isNotEmpty() && !cleanGrade.startsWith("nicht")
+    val isBestanden = cleanGrade.lowercase() == "b" || cleanGrade.lowercase() == "bestanden"
     val badgeColor = when {
         cleanGrade.isEmpty() -> MaterialTheme.colorScheme.surfaceVariant
+        isBestanden -> MaterialTheme.colorScheme.primaryContainer
         cleanGrade.startsWith("1") || cleanGrade.startsWith("2") -> MaterialTheme.colorScheme.primaryContainer
         cleanGrade.startsWith("3") || cleanGrade.startsWith("4") -> Color(0xFFFFF3CD) // Yellow background
         else -> MaterialTheme.colorScheme.errorContainer
     }
     val textColor = when {
         cleanGrade.isEmpty() -> MaterialTheme.colorScheme.onSurfaceVariant
+        isBestanden -> MaterialTheme.colorScheme.onPrimaryContainer
         cleanGrade.startsWith("1") || cleanGrade.startsWith("2") -> MaterialTheme.colorScheme.onPrimaryContainer
         cleanGrade.startsWith("3") || cleanGrade.startsWith("4") -> Color(0xFF856404) // Dark yellow text
         else -> MaterialTheme.colorScheme.onErrorContainer
@@ -479,12 +658,21 @@ fun GradeBadge(grade: String, small: Boolean = false) {
             ),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = cleanGrade.ifEmpty { "-" },
-            style = if (small) MaterialTheme.typography.labelMedium else MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = textColor
-        )
+        if (isBestanden) {
+            Icon(
+                imageVector = Icons.Default.Check,
+                contentDescription = "Bestanden",
+                tint = textColor,
+                modifier = Modifier.size(if (small) 16.dp else 20.dp)
+            )
+        } else {
+            Text(
+                text = cleanGrade.ifEmpty { "-" },
+                style = if (small) MaterialTheme.typography.labelMedium else MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = textColor
+            )
+        }
     }
 }
 
@@ -721,3 +909,89 @@ fun DocumentCard(doc: DualisDocument, onDocumentClick: (String) -> Unit) {
         }
     }
 }
+
+private fun showBiometricPrompt(
+    activity: FragmentActivity,
+    onSuccess: () -> Unit,
+    onError: (String) -> Unit
+) {
+    val executor = ContextCompat.getMainExecutor(activity)
+    val biometricPrompt = BiometricPrompt(
+        activity,
+        executor,
+        object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                super.onAuthenticationError(errorCode, errString)
+                onError(errString.toString())
+            }
+
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                super.onAuthenticationSucceeded(result)
+                onSuccess()
+            }
+
+            override fun onAuthenticationFailed() {
+                super.onAuthenticationFailed()
+                onError("Authentifizierung fehlgeschlagen")
+            }
+        }
+    )
+
+    val promptInfo = BiometricPrompt.PromptInfo.Builder()
+        .setTitle("Dualis freischalten")
+        .setSubtitle("Authentifizieren Sie sich mit Ihren biometrischen Daten")
+        .setNegativeButtonText("Abbrechen")
+        .build()
+
+    biometricPrompt.authenticate(promptInfo)
+}
+
+@Composable
+fun DualisLockedView(
+    onUnlockClick: () -> Unit,
+    errorMessage: String?
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = Icons.Default.Lock,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(64.dp)
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "Dualis ist gesperrt",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "Bitte entsperren Sie die App mit Ihren biometrischen Daten, um fortzufahren.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+        if (errorMessage != null) {
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = errorMessage,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+        Spacer(modifier = Modifier.height(24.dp))
+        Button(onClick = onUnlockClick) {
+            Icon(Icons.Default.Fingerprint, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Entsperren")
+        }
+    }
+}
+

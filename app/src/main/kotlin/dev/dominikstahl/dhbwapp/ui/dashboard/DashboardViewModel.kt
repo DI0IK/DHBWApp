@@ -4,6 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import dev.dominikstahl.dhbwapp.data.remote.ApiClient
+import dev.dominikstahl.dhbwapp.data.remote.DualisClient
+import dev.dominikstahl.dhbwapp.data.local.DualisCredentialsManager
+import dev.dominikstahl.dhbwapp.data.remote.DualisGPA
 import dev.dominikstahl.dhbwapp.remote.models.MenuDay
 import dev.dominikstahl.dhbwapp.remote.models.MensaResponse
 import dev.dominikstahl.dhbwapp.remote.models.ParkingLot
@@ -20,6 +23,8 @@ import java.time.format.DateTimeFormatter
 import dev.dominikstahl.dhbwapp.ui.mensa.MergedMenuItem
 import dev.dominikstahl.dhbwapp.ui.mensa.groupMenuItems
 
+import dev.dominikstahl.dhbwapp.data.local.UserPreferences
+
 data class DashboardUiState(
     val upcomingLectures: List<RaplaLectureEvent> = emptyList(),
     val todayMensaMeals: List<MergedMenuItem> = emptyList(),
@@ -27,11 +32,20 @@ data class DashboardUiState(
     val parkingLots: List<ParkingLot> = emptyList(),
     val roomStats: RoomAvailabilityResponseStats? = null,
     val loading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val dualisCredentialsExist: Boolean = false,
+    val dualisUnlocked: Boolean = false,
+    val dualisGpa: DualisGPA? = null,
+    val dualisLoading: Boolean = false,
+    val dualisError: String? = null,
+    val dualisNewestGrade: String? = null,
 )
 
 class DashboardViewModel(
     private val apiClient: ApiClient,
+    private val dualisClient: DualisClient,
+    private val credentialsManager: DualisCredentialsManager,
+    private val userPreferences: UserPreferences,
     private var site: String,
     private var course: String
 ) : ViewModel() {
@@ -39,9 +53,45 @@ class DashboardViewModel(
     private val _uiState = MutableStateFlow(DashboardUiState())
     val uiState: StateFlow<DashboardUiState> = _uiState
 
+    init {
+        checkSavedDualisCredentials()
+        viewModelScope.launch {
+            userPreferences.newestGradeInfo.collect { newestGrade ->
+                _uiState.value = _uiState.value.copy(dualisNewestGrade = newestGrade)
+            }
+        }
+    }
+
+    fun checkSavedDualisCredentials() {
+        val creds = credentialsManager.getCredentials()
+        _uiState.value = _uiState.value.copy(dualisCredentialsExist = creds != null)
+    }
+
+    fun unlockDualisAndLoadData() {
+        val creds = credentialsManager.getCredentials() ?: return
+        _uiState.value = _uiState.value.copy(dualisLoading = true, dualisError = null)
+        viewModelScope.launch {
+            try {
+                val session = dualisClient.login(creds.first, creds.second)
+                val gpaData = dualisClient.getGPA(session)
+                _uiState.value = _uiState.value.copy(
+                    dualisUnlocked = true,
+                    dualisGpa = gpaData,
+                    dualisLoading = false
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    dualisLoading = false,
+                    dualisError = "Fehler beim Laden von Dualis: ${e.message}"
+                )
+            }
+        }
+    }
+
     fun updateParams(newSite: String, newCourse: String) {
         site = newSite
         course = newCourse
+        checkSavedDualisCredentials()
     }
 
     fun loadDashboardData() {
@@ -111,7 +161,7 @@ class DashboardViewModel(
                 // Compute room stats
                 val roomStats = roomResponse?.stats
 
-                _uiState.value = DashboardUiState(
+                _uiState.value = _uiState.value.copy(
                     upcomingLectures = upcoming.take(2),
                     todayMensaMeals = todayMeals,
                     mensaClosed = closed,
@@ -142,12 +192,15 @@ class DashboardViewModel(
 
     class Factory(
         private val apiClient: ApiClient,
+        private val dualisClient: DualisClient,
+        private val credentialsManager: DualisCredentialsManager,
+        private val userPreferences: UserPreferences,
         private val site: String,
         private val course: String
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return DashboardViewModel(apiClient, site, course) as T
+            return DashboardViewModel(apiClient, dualisClient, credentialsManager, userPreferences, site, course) as T
         }
     }
 }
