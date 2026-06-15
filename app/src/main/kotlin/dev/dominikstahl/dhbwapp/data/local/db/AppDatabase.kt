@@ -14,7 +14,7 @@ import androidx.room.TypeConverters
         CachedMoodleAssignment::class,
         CachedMoodleContent::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(DbConverters::class)

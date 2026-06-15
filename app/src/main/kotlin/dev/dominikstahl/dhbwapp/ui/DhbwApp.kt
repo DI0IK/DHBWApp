@@ -3,6 +3,7 @@ package dev.dominikstahl.dhbwapp.ui
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.Alignment
@@ -49,6 +50,7 @@ import dev.dominikstahl.dhbwapp.ui.moodle.MoodleScreen
 import dev.dominikstahl.dhbwapp.ui.moodle.MoodleLoginScreen
 import dev.dominikstahl.dhbwapp.ui.moodle.MoodleCourseDetailScreen
 import dev.dominikstahl.dhbwapp.ui.moodle.MoodleViewModel
+import dev.dominikstahl.dhbwapp.ui.moodle.MoodleMaterialScreen
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.launch
 
@@ -83,9 +85,10 @@ fun DhbwApp(httpClient: HttpClient, userPreferences: UserPreferences) {
         Screen.Dualis.route,
         Screen.Moodle.route,
         Screen.MoodleLogin.route,
-        Screen.MoodleCourseDetail.route
+        Screen.MoodleCourseDetail.route,
+        Screen.MoodleMaterial.route
     )
-    val showBottomBar = selectedSite != null && currentRoute in mainRoutes + detailRoutes
+    val showBottomBar = selectedSite != null && currentRoute in mainRoutes + detailRoutes && currentRoute != Screen.MoodleMaterial.route
 
     DhbwAppTheme {
         Scaffold(
@@ -122,7 +125,15 @@ fun DhbwApp(httpClient: HttpClient, userPreferences: UserPreferences) {
                     startDestination = if (selectedSite != null) Screen.Dashboard.route else Screen.Onboarding.route,
                     modifier = Modifier
                         .fillMaxHeight()
-                        .widthIn(max = 800.dp),
+                        .then(
+                            if (currentRoute == Screen.MoodleMaterial.route || 
+                                currentRoute == Screen.Moodle.route || 
+                                currentRoute == Screen.MoodleCourseDetail.route) {
+                                Modifier.fillMaxWidth()
+                            } else {
+                                Modifier.widthIn(max = 800.dp)
+                            }
+                        ),
                 ) {
                 composable(Screen.Onboarding.route) {
                     OnboardingScreen(
@@ -227,6 +238,11 @@ fun DhbwApp(httpClient: HttpClient, userPreferences: UserPreferences) {
                             },
                             onCourseClick = { courseId ->
                                 navController.navigate("moodle_course_detail/$courseId")
+                            },
+                            onNavigateToMaterial = { contentId, url, title, type ->
+                                val encodedUrl = java.net.URLEncoder.encode(url ?: "", "UTF-8")
+                                val encodedTitle = java.net.URLEncoder.encode(title, "UTF-8")
+                                navController.navigate("moodle_material/$contentId?url=$encodedUrl&title=$encodedTitle&type=$type")
                             }
                         )
                     }
@@ -257,6 +273,40 @@ fun DhbwApp(httpClient: HttpClient, userPreferences: UserPreferences) {
                     )
                     MoodleCourseDetailScreen(
                         courseId = courseId,
+                        viewModel = moodleViewModel,
+                        onBackClick = { navController.popBackStack() },
+                        onNavigateToMaterial = { contentId, url, title, type ->
+                            val encodedUrl = java.net.URLEncoder.encode(url ?: "", "UTF-8")
+                            val encodedTitle = java.net.URLEncoder.encode(title, "UTF-8")
+                            navController.navigate("moodle_material/$contentId?url=$encodedUrl&title=$encodedTitle&type=$type")
+                        }
+                    )
+                }
+                composable(
+                    route = "moodle_material/{contentId}?url={url}&title={title}&type={type}",
+                    arguments = listOf(
+                        androidx.navigation.navArgument("contentId") { type = androidx.navigation.NavType.IntType },
+                        androidx.navigation.navArgument("url") { type = androidx.navigation.NavType.StringType },
+                        androidx.navigation.navArgument("title") { type = androidx.navigation.NavType.StringType },
+                        androidx.navigation.navArgument("type") { type = androidx.navigation.NavType.StringType }
+                    )
+                ) { backStackEntry ->
+                    val contentId = backStackEntry.arguments?.getInt("contentId") ?: 0
+                    val encodedUrl = backStackEntry.arguments?.getString("url") ?: ""
+                    val encodedTitle = backStackEntry.arguments?.getString("title") ?: ""
+                    val type = backStackEntry.arguments?.getString("type") ?: ""
+                    val decodedUrl = java.net.URLDecoder.decode(encodedUrl, "UTF-8")
+                    val decodedTitle = java.net.URLDecoder.decode(encodedTitle, "UTF-8")
+                    val moodleViewModel: MoodleViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+                        factory = MoodleViewModel.Factory(
+                            moodleSessionManager, moodleRepository, userPreferences
+                        )
+                    )
+                    MoodleMaterialScreen(
+                        contentId = contentId,
+                        url = decodedUrl,
+                        title = decodedTitle,
+                        type = type,
                         viewModel = moodleViewModel,
                         onBackClick = { navController.popBackStack() }
                     )

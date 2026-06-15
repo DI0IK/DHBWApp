@@ -52,6 +52,9 @@ interface MoodleDao {
     @Query("SELECT * FROM moodle_course_contents WHERE courseId = :courseId")
     fun getContentForCourseFlow(courseId: Int): Flow<List<CachedMoodleContent>>
 
+    @Query("SELECT * FROM moodle_course_contents WHERE id = :contentId")
+    fun getContentFlow(contentId: Int): Flow<CachedMoodleContent?>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertContents(contents: List<CachedMoodleContent>): List<Long>
 
@@ -60,6 +63,12 @@ interface MoodleDao {
 
     @Query("DELETE FROM moodle_course_contents")
     fun deleteContents(): Int
+
+    @Transaction
+    fun refreshContents(contents: List<CachedMoodleContent>) {
+        deleteContents()
+        insertContents(contents)
+    }
 
     @Transaction
     fun refreshContentForCourse(courseId: Int, contents: List<CachedMoodleContent>) {

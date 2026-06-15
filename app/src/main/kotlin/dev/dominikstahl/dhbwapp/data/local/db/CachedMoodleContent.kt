@@ -13,5 +13,6 @@ data class CachedMoodleContent(
     val type: String, // "resource", "url", "folder", "page"
     val url: String?, // download URL or link URL
     val fileSize: Int,
-    val instanceId: Int? = null
+    val instanceId: Int? = null,
+    val description: String? = null
 )

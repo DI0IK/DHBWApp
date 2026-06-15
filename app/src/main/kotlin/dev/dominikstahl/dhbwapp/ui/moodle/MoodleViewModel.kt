@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
+import android.util.Log
 
 data class MoodleUiState(
     val isLoggedIn: Boolean = false,
@@ -37,7 +38,11 @@ class MoodleViewModel(
     private val _uiState = MutableStateFlow(MoodleUiState())
     val uiState: StateFlow<MoodleUiState> = _uiState
 
+    private var lastAutoLoginTime: Long = 0
+    private val autoLoginCooldownMs = 360_000L // 6 minutes (360 seconds)
+
     init {
+        lastAutoLoginTime = sessionManager.getLastAutoLoginTime()
         val session = sessionManager.getSession()
         val loggedIn = session != null
         _uiState.value = _uiState.value.copy(
@@ -64,8 +69,8 @@ class MoodleViewModel(
         }
     }
 
-    fun loginWithToken(token: String, userId: Int, siteUrl: String) {
-        sessionManager.saveSession(token, userId, siteUrl)
+    fun loginWithToken(token: String, userId: Int, siteUrl: String, privateToken: String? = null) {
+        sessionManager.saveSession(token, userId, siteUrl, privateToken)
         _uiState.value = _uiState.value.copy(
             isLoggedIn = true,
             siteUrl = siteUrl,
@@ -80,6 +85,12 @@ class MoodleViewModel(
         viewModelScope.launch {
             repository.clearCache()
             userPreferences.clearMoodleCache()
+        }
+        try {
+            android.webkit.CookieManager.getInstance().removeAllCookies(null)
+            android.webkit.CookieManager.getInstance().flush()
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
@@ -108,6 +119,10 @@ class MoodleViewModel(
 
     fun getContentForCourseFlow(courseId: Int): Flow<List<CachedMoodleContent>> {
         return repository.getContentForCourseFlow(courseId)
+    }
+
+    fun getContentFlow(contentId: Int): Flow<CachedMoodleContent?> {
+        return repository.getContentFlow(contentId)
     }
 
     fun downloadAndOpenFile(
@@ -168,6 +183,69 @@ class MoodleViewModel(
         val safeFilename = filename.replace(Regex("[\\\\/:*?\"<>|]"), "_")
         return java.io.File(cacheDir, safeFilename).exists()
     }
+
+    fun getDownloadedFile(context: android.content.Context, url: String, suggestedFilename: String): java.io.File {
+        val cacheDir = java.io.File(context.cacheDir, "moodle_files")
+        val extensionFromUrl = url.substringAfterLast('.', "").substringBefore('?')
+        val filename = if (extensionFromUrl.isNotEmpty() && !suggestedFilename.endsWith(".$extensionFromUrl", ignoreCase = true)) {
+            "${suggestedFilename}.$extensionFromUrl"
+        } else {
+            suggestedFilename
+        }
+        val safeFilename = filename.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+        return java.io.File(cacheDir, safeFilename)
+    }
+
+    fun downloadFile(
+        context: android.content.Context,
+        url: String,
+        suggestedFilename: String,
+        onComplete: (Result<java.io.File>) -> Unit
+    ) {
+        val session = sessionManager.getSession()
+        if (session == null) {
+            onComplete(Result.failure(Exception("Nicht angemeldet")))
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val fileData = repository.downloadFile(url, session.token)
+                val cacheDir = java.io.File(context.cacheDir, "moodle_files").apply { mkdirs() }
+                
+                val extensionFromUrl = url.substringAfterLast('.', "").substringBefore('?')
+                val filename = if (extensionFromUrl.isNotEmpty() && !suggestedFilename.endsWith(".$extensionFromUrl", ignoreCase = true)) {
+                    "${suggestedFilename}.$extensionFromUrl"
+                } else {
+                    suggestedFilename
+                }
+
+                val safeFilename = filename.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+                val destFile = java.io.File(cacheDir, safeFilename)
+                destFile.writeBytes(fileData)
+                onComplete(Result.success(destFile))
+            } catch (e: Exception) {
+                onComplete(Result.failure(e))
+            }
+        }
+    }
+
+    fun openFileExternally(context: android.content.Context, file: java.io.File) {
+        try {
+            val authority = "${context.packageName}.fileprovider"
+            val fileUri = androidx.core.content.FileProvider.getUriForFile(context, authority, file)
+
+            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                val ext = file.name.substringAfterLast('.', "").lowercase()
+                val mime = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "*/*"
+                setDataAndType(fileUri, mime)
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            Log.e("MoodleViewModel", "Fehler beim Öffnen der Datei: ${e.message}", e)
+        }
+    }
     fun uploadAndSaveAssignmentFile(
         assignmentId: Int,
         filename: String,
@@ -187,6 +265,7 @@ class MoodleViewModel(
                 repository.syncMoodle(session.siteUrl, session.token, session.userId)
                 onResult(Result.success(Unit))
             } catch (e: Exception) {
+                Log.e("MoodleViewModel", "Fehler beim Hochladen/Speichern der Aufgabe: ${e.message}", e)
                 onResult(Result.failure(e))
             }
         }
@@ -207,6 +286,7 @@ class MoodleViewModel(
                 repository.syncMoodle(session.siteUrl, session.token, session.userId)
                 onResult(Result.success(Unit))
             } catch (e: Exception) {
+                Log.e("MoodleViewModel", "Fehler beim Einreichen zur Bewertung: ${e.message}", e)
                 onResult(Result.failure(e))
             }
         }
@@ -223,14 +303,54 @@ class MoodleViewModel(
         }
         viewModelScope.launch {
             try {
-                repository.saveSubmission(session.siteUrl, session.token, assignmentId, 0)
+                val unusedDraftId = repository.getUnusedDraftItemId(session.siteUrl, session.token)
+                repository.saveSubmission(session.siteUrl, session.token, assignmentId, unusedDraftId)
                 repository.syncMoodle(session.siteUrl, session.token, session.userId)
                 onResult(Result.success(Unit))
+            } catch (e: Exception) {
+                Log.e("MoodleViewModel", "Fehler beim Zurückziehen der Abgabe: ${e.message}", e)
+                val friendlyException = if (e.message?.contains("couldnotsavesubmission") == true) {
+                    Exception("Zurückziehen über die App fehlgeschlagen. Moodle erlaubt dies für eingereichte Aufgaben nur direkt über die Moodle-Website.")
+                } else {
+                    e
+                }
+                onResult(Result.failure(friendlyException))
+            }
+        }
+    }
+
+    fun getAutoLoginUrl(targetUrl: String, onResult: (Result<String>) -> Unit) {
+        val session = sessionManager.getSession()
+        if (session == null) {
+            onResult(Result.failure(Exception("Nicht angemeldet")))
+            return
+        }
+
+        val now = System.currentTimeMillis()
+        if (now - lastAutoLoginTime < autoLoginCooldownMs) {
+            // Cooldown is active, return target URL directly since WebView already has active session cookies
+            onResult(Result.success(targetUrl))
+            return
+        }
+
+        val privateToken = session.privateToken
+        if (privateToken.isNullOrEmpty()) {
+            onResult(Result.failure(Exception("Bitte melde dich in den Moodle-Einstellungen ab und wieder an, um automatischen Web-Zugriff zu aktivieren.")))
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val url = repository.getAutoLoginUrl(session.siteUrl, session.token, privateToken, session.userId, targetUrl)
+                val nowTime = System.currentTimeMillis()
+                lastAutoLoginTime = nowTime
+                sessionManager.saveLastAutoLoginTime(nowTime)
+                onResult(Result.success(url))
             } catch (e: Exception) {
                 onResult(Result.failure(e))
             }
         }
     }
+
     class Factory(
         private val sessionManager: MoodleSessionManager,
         private val repository: MoodleRepository,

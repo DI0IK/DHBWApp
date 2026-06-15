@@ -15,4 +15,5 @@ sealed class Screen(val route: String) {
     data object Moodle : Screen("moodle")
     data object MoodleLogin : Screen("moodle_login")
     data object MoodleCourseDetail : Screen("moodle_course_detail/{courseId}")
+    data object MoodleMaterial : Screen("moodle_material/{contentId}?url={url}&title={title}&type={type}")
 }

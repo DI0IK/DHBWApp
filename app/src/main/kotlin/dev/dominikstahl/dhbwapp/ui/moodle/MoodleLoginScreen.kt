@@ -208,7 +208,8 @@ fun MoodleLoginScreen(
                                             val parts = decoded.split(":::")
                                             if (parts.size >= 2) {
                                                 val token = parts[1]
-                                                verifyAndCompleteLogin(token)
+                                                val privateToken = if (parts.size >= 3) parts[2] else null
+                                                verifyAndCompleteLogin(token, privateToken)
                                                 return true
                                             }
                                         } catch (e: Exception) {
@@ -218,13 +219,13 @@ fun MoodleLoginScreen(
                                     return false
                                 }
 
-                                private fun verifyAndCompleteLogin(token: String) {
+                                private fun verifyAndCompleteLogin(token: String, privateToken: String?) {
                                     isVerifyingToken = true
                                     coroutineScope.launch {
                                         try {
                                             val siteUrl = activeUrl!!
                                             val siteInfo = moodleClient.getSiteInfo(siteUrl, token)
-                                            viewModel.loginWithToken(token, siteInfo.userid, siteUrl)
+                                            viewModel.loginWithToken(token, siteInfo.userid, siteUrl, privateToken)
                                             onLoginSuccess()
                                         } catch (e: Exception) {
                                             verificationError = "Verifizierung fehlgeschlagen: ${e.localizedMessage}"

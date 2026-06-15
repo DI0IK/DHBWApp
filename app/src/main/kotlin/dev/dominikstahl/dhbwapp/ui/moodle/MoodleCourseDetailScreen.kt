@@ -33,7 +33,9 @@ import java.util.Locale
 fun MoodleCourseDetailScreen(
     courseId: Int,
     viewModel: MoodleViewModel,
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
+    onNavigateToMaterial: (contentId: Int, url: String?, title: String, type: String) -> Unit,
+    showBackButton: Boolean = true
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val course = remember(uiState.courses, courseId) { viewModel.getCourse(courseId) }
@@ -50,9 +52,34 @@ fun MoodleCourseDetailScreen(
         }
     }
 
-    var selectedAssignment by remember { mutableStateOf<CachedMoodleAssignment?>(null) }
+    var selectedAssignmentId by remember { mutableStateOf<Int?>(null) }
+    val selectedAssignment = remember(selectedAssignmentId, assignments) {
+        assignments.find { it.id == selectedAssignmentId }
+    }
     var refreshCounter by remember { mutableIntStateOf(0) }
     val context = LocalContext.current
+    val handleAutoLoginClick = remember(context, viewModel, onNavigateToMaterial) {
+        { item: CachedMoodleContent, url: String ->
+            android.widget.Toast.makeText(context, "Anmeldung wird geladen...", android.widget.Toast.LENGTH_SHORT).show()
+            viewModel.getAutoLoginUrl(url) { res ->
+                if (res.isSuccess) {
+                    val autologinUrl = res.getOrNull()
+                    if (autologinUrl != null) {
+                        onNavigateToMaterial(item.id, autologinUrl, item.name, item.type)
+                    }
+                } else {
+                    val exception = res.exceptionOrNull()
+                    val errorMessage = exception?.message ?: ""
+                    val displayMessage = if (errorMessage.contains("invalidprivatetoken")) {
+                        "Sitzung abgelaufen. Bitte logge dich aus und wieder ein, um die automatische Anmeldung zu reaktivieren."
+                    } else {
+                        "Fehler: $errorMessage"
+                    }
+                    android.widget.Toast.makeText(context, displayMessage, android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -66,8 +93,10 @@ fun MoodleCourseDetailScreen(
                 },
                 windowInsets = WindowInsets(0.dp),
                 navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
+                    if (showBackButton) {
+                        IconButton(onClick = onBackClick) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
+                        }
                     }
                 }
             )
@@ -127,11 +156,11 @@ fun MoodleCourseDetailScreen(
                                 modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
                             )
                         }
-                        items(unmatchedAssignments) { assignment ->
+                        items(unmatchedAssignments, key = { it.id }) { assignment ->
                             MoodleCourseAssignmentCard(
                                 assignment = assignment,
                                 course = course,
-                                onClick = { selectedAssignment = assignment }
+                                onClick = { selectedAssignmentId = assignment.id }
                             )
                         }
                     }
@@ -146,62 +175,115 @@ fun MoodleCourseDetailScreen(
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
-                                )
+                               )
                             }
-                            items(sectionItems) { item ->
-                                if (item.type == "assign") {
-                                    val assignment = assignments.find { 
-                                        (item.instanceId != null && it.id == item.instanceId) || it.cmid == item.id || it.name.trim().equals(item.name.trim(), ignoreCase = true)
-                                    } ?: CachedMoodleAssignment(
-                                        id = item.id,
-                                        cmid = item.id,
-                                        courseId = courseId,
-                                        name = item.name,
-                                        dueDate = 0,
-                                        description = "Details werden geladen...",
-                                        isSubmitted = false,
-                                        statusText = null,
-                                        attachments = emptyList()
-                                    )
-                                    MoodleCourseAssignmentCard(
-                                        assignment = assignment,
-                                        course = course,
-                                        onClick = { selectedAssignment = assignment }
-                                    )
-                                } else {
-                                    val downloaded = remember(item.url, refreshCounter) {
-                                        item.url?.let { url -> viewModel.isFileDownloaded(context, url, item.name) } ?: false
+                            items(sectionItems, key = { it.id }) { item ->
+                                when (item.type) {
+                                    "assign" -> {
+                                        val assignment = assignments.find { 
+                                            (item.instanceId != null && it.id == item.instanceId) || it.cmid == item.id || it.name.trim().equals(item.name.trim(), ignoreCase = true)
+                                        } ?: CachedMoodleAssignment(
+                                            id = item.id,
+                                            cmid = item.id,
+                                            courseId = courseId,
+                                            name = item.name,
+                                            dueDate = 0,
+                                            description = "Details werden geladen...",
+                                            isSubmitted = false,
+                                            statusText = null,
+                                            attachments = emptyList()
+                                        )
+                                        MoodleCourseAssignmentCard(
+                                            assignment = assignment,
+                                            course = course,
+                                            onClick = { selectedAssignmentId = assignment.id }
+                                        )
                                     }
-                                    MoodleMaterialCard(
-                                        item = item,
-                                        downloaded = downloaded,
-                                        onClick = {
-                                            item.url?.let { urlString ->
-                                                if (item.type == "resource") {
-                                                    if (downloaded) {
-                                                        viewModel.downloadAndOpenFile(context, urlString, item.name) { }
-                                                    } else {
-                                                        android.widget.Toast.makeText(context, "Material wird heruntergeladen...", android.widget.Toast.LENGTH_SHORT).show()
-                                                        viewModel.downloadAndOpenFile(context, urlString, item.name) { result ->
-                                                            if (result.isSuccess) {
-                                                                refreshCounter++
+                                    "label" -> {
+                                        dev.dominikstahl.dhbwapp.ui.moodle.components.MoodleLabelCard(item = item)
+                                    }
+                                    "forum" -> {
+                                        dev.dominikstahl.dhbwapp.ui.moodle.components.MoodleForumCard(
+                                            item = item,
+                                            onClick = {
+                                                item.url?.let { handleAutoLoginClick(item, it) }
+                                            }
+                                        )
+                                    }
+                                    "quiz" -> {
+                                        dev.dominikstahl.dhbwapp.ui.moodle.components.MoodleQuizCard(
+                                            item = item,
+                                            onClick = {
+                                                item.url?.let { handleAutoLoginClick(item, it) }
+                                            }
+                                        )
+                                    }
+                                    "choice" -> {
+                                        dev.dominikstahl.dhbwapp.ui.moodle.components.MoodleChoiceCard(
+                                            item = item,
+                                            onClick = {
+                                                item.url?.let { handleAutoLoginClick(item, it) }
+                                            }
+                                        )
+                                    }
+                                    "feedback" -> {
+                                        dev.dominikstahl.dhbwapp.ui.moodle.components.MoodleFeedbackCard(
+                                            item = item,
+                                            onClick = {
+                                                item.url?.let { handleAutoLoginClick(item, it) }
+                                            }
+                                        )
+                                    }
+                                    "bigbluebuttonbn" -> {
+                                        dev.dominikstahl.dhbwapp.ui.moodle.components.MoodleBigBlueButtonCard(
+                                            item = item,
+                                            onClick = {
+                                                item.url?.let { handleAutoLoginClick(item, it) }
+                                            }
+                                        )
+                                    }
+                                    else -> {
+                                        val downloaded = remember(item.url, refreshCounter) {
+                                            item.url?.let { url -> viewModel.isFileDownloaded(context, url, item.name) } ?: false
+                                        }
+                                        MoodleMaterialCard(
+                                            item = item,
+                                            downloaded = downloaded,
+                                            onClick = {
+                                                if (item.type == "page") {
+                                                    item.url?.let { handleAutoLoginClick(item, it) }
+                                                } else if (item.type == "resource" && item.url?.substringAfterLast('.', "")?.substringBefore('?')?.lowercase() == "pdf") {
+                                                    onNavigateToMaterial(item.id, item.url, item.name, item.type)
+                                                } else {
+                                                    val urlString = item.url
+                                                    if (urlString != null) {
+                                                        if (item.type == "resource") {
+                                                            if (downloaded) {
+                                                                viewModel.downloadAndOpenFile(context, urlString, item.name) { }
                                                             } else {
-                                                                android.widget.Toast.makeText(context, "Fehler beim Laden: ${result.exceptionOrNull()?.message}", android.widget.Toast.LENGTH_LONG).show()
+                                                                android.widget.Toast.makeText(context, "Material wird heruntergeladen...", android.widget.Toast.LENGTH_SHORT).show()
+                                                                viewModel.downloadAndOpenFile(context, urlString, item.name) { result ->
+                                                                    if (result.isSuccess) {
+                                                                        refreshCounter++
+                                                                    } else {
+                                                                        android.widget.Toast.makeText(context, "Fehler beim Laden: ${result.exceptionOrNull()?.message}", android.widget.Toast.LENGTH_LONG).show()
+                                                                    }
+                                                                }
                                                             }
+                                                        } else {
+                                                            try {
+                                                                val intent = android.content.Intent(
+                                                                    android.content.Intent.ACTION_VIEW,
+                                                                    android.net.Uri.parse(urlString)
+                                                                )
+                                                                context.startActivity(intent)
+                                                            } catch (_: Exception) {}
                                                         }
                                                     }
-                                                } else {
-                                                    try {
-                                                        val intent = android.content.Intent(
-                                                            android.content.Intent.ACTION_VIEW,
-                                                            android.net.Uri.parse(urlString)
-                                                        )
-                                                        context.startActivity(intent)
-                                                    } catch (_: Exception) {}
                                                 }
                                             }
-                                        }
-                                    )
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -211,10 +293,10 @@ fun MoodleCourseDetailScreen(
 
             if (selectedAssignment != null) {
                 MoodleAssignmentBottomSheet(
-                    assignment = selectedAssignment!!,
+                    assignment = selectedAssignment,
                     courseName = course?.fullName,
                     viewModel = viewModel,
-                    onDismissRequest = { selectedAssignment = null }
+                    onDismissRequest = { selectedAssignmentId = null }
                 )
             }
         }

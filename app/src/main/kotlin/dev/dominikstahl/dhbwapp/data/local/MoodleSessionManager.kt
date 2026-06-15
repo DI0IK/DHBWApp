@@ -45,7 +45,7 @@ class MoodleSessionManager(context: Context) {
         return keyGenerator.generateKey()
     }
 
-    fun saveSession(token: String, userId: Int, siteUrl: String) {
+    fun saveSession(token: String, userId: Int, siteUrl: String, privateToken: String? = null) {
         try {
             val key = getSecretKey()
             val cipher = Cipher.getInstance(AES_GCM_NOPADDING)
@@ -53,7 +53,8 @@ class MoodleSessionManager(context: Context) {
 
             val tokenBase64 = Base64.encodeToString(token.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
             val siteUrlBase64 = Base64.encodeToString(siteUrl.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
-            val payload = "$tokenBase64:$userId:$siteUrlBase64"
+            val privateTokenBase64 = Base64.encodeToString((privateToken ?: "").toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+            val payload = "$tokenBase64:$userId:$siteUrlBase64:$privateTokenBase64"
 
             val ciphertext = cipher.doFinal(payload.toByteArray(Charsets.UTF_8))
             val iv = cipher.iv
@@ -70,7 +71,8 @@ class MoodleSessionManager(context: Context) {
     data class MoodleSession(
         val token: String,
         val userId: Int,
-        val siteUrl: String
+        val siteUrl: String,
+        val privateToken: String? = null
     )
 
     fun getSession(): MoodleSession? {
@@ -89,11 +91,14 @@ class MoodleSessionManager(context: Context) {
             val decryptedBytes = cipher.doFinal(ciphertext)
             val payload = String(decryptedBytes, Charsets.UTF_8)
             val parts = payload.split(":")
-            if (parts.size == 3) {
+            if (parts.size >= 3) {
                 val token = String(Base64.decode(parts[0], Base64.NO_WRAP), Charsets.UTF_8)
                 val userId = parts[1].toInt()
                 val siteUrl = String(Base64.decode(parts[2], Base64.NO_WRAP), Charsets.UTF_8)
-                return MoodleSession(token, userId, siteUrl)
+                val privateToken = if (parts.size >= 4) {
+                    String(Base64.decode(parts[3], Base64.NO_WRAP), Charsets.UTF_8).ifEmpty { null }
+                } else null
+                return MoodleSession(token, userId, siteUrl, privateToken)
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -101,10 +106,21 @@ class MoodleSessionManager(context: Context) {
         return null
     }
 
+    fun getLastAutoLoginTime(): Long {
+        return sharedPreferences.getLong("lastAutoLoginTime", 0L)
+    }
+
+    fun saveLastAutoLoginTime(time: Long) {
+        sharedPreferences.edit()
+            .putLong("lastAutoLoginTime", time)
+            .apply()
+    }
+
     fun clearSession() {
         sharedPreferences.edit()
             .remove(PREF_IV)
             .remove(PREF_SESSION)
+            .remove("lastAutoLoginTime")
             .apply()
     }
 }

@@ -124,7 +124,7 @@ class MoodleClient(private val httpClient: HttpClient) {
                         append("itemid", "0")
                         append("file", fileBytes, Headers.build {
                             append(HttpHeaders.ContentType, ContentType.Application.OctetStream.toString())
-                            append(HttpHeaders.ContentDisposition, "filename=\"$filename\"")
+                            append(HttpHeaders.ContentDisposition, "form-data; name=\"file\"; filename=\"$filename\"")
                         })
                     }
                 )
@@ -147,12 +147,13 @@ class MoodleClient(private val httpClient: HttpClient) {
         val response = httpClient.post("$base/webservice/rest/server.php") {
             parameter("wsfunction", "mod_assign_save_submission")
             parameter("wstoken", token)
-            parameter("assignid", assignmentId)
+            parameter("assignmentid", assignmentId)
             parameter("plugindata[files_filemanager]", draftItemId)
             parameter("moodlewsrestformat", "json")
         }
         val text = response.bodyAsText()
-        if (text.contains("exception")) {
+        android.util.Log.e("MoodleClient", "saveSubmission response: $text")
+        if (text.contains("exception") || text.contains("warningcode") || (text.trim().startsWith("[") && text.trim() != "[]")) {
             throw Exception("Moodle Save Submission Error: $text")
         }
     }
@@ -166,7 +167,7 @@ class MoodleClient(private val httpClient: HttpClient) {
         val response = httpClient.post("$base/webservice/rest/server.php") {
             parameter("wsfunction", "mod_assign_submit_for_grading")
             parameter("wstoken", token)
-            parameter("assignid", assignmentId)
+            parameter("assignmentid", assignmentId)
             parameter("acceptsubmissionstatement", 1)
             parameter("moodlewsrestformat", "json")
         }
@@ -175,7 +176,48 @@ class MoodleClient(private val httpClient: HttpClient) {
             throw Exception("Moodle Submit for Grading Error: $text")
         }
     }
+
+    suspend fun getUnusedDraftItemId(
+        siteUrl: String,
+        token: String
+    ): Int {
+        val base = normalizeUrl(siteUrl)
+        val response = httpClient.get("$base/webservice/rest/server.php") {
+            parameter("wsfunction", "core_files_get_unused_draft_itemid")
+            parameter("wstoken", token)
+            parameter("moodlewsrestformat", "json")
+        }
+        val text = response.bodyAsText()
+        if (text.contains("exception")) {
+            throw Exception("Moodle Get Draft ID Error: $text")
+        }
+        return json.decodeFromString<MoodleDraftIdResponse>(text).itemid
+    }
+
+    suspend fun getAutoLoginKey(siteUrl: String, token: String, privateToken: String): MoodleAutoLoginDto {
+        val base = normalizeUrl(siteUrl)
+        val response = httpClient.post("$base/webservice/rest/server.php") {
+            header("User-Agent", "MoodleMobile")
+            setBody(FormDataContent(Parameters.build {
+                append("wsfunction", "tool_mobile_get_autologin_key")
+                append("wstoken", token)
+                append("privatetoken", privateToken)
+                append("moodlewsrestformat", "json")
+            }))
+        }
+        val text = response.bodyAsText()
+        if (text.contains("exception")) {
+            throw Exception("Moodle AutoLogin Key Error: $text")
+        }
+        return json.decodeFromString(text)
+    }
 }
+
+@Serializable
+data class MoodleAutoLoginDto(
+    val key: String,
+    val autologinurl: String
+)
 
 @Serializable
 data class MoodleSiteInfo(
@@ -305,6 +347,7 @@ data class MoodleModuleDto(
     val modname: String,
     val instance: Int? = null,
     val url: String? = null,
+    val description: String? = null,
     val contents: List<MoodleContentFileDto>? = emptyList()
 )
 
@@ -313,4 +356,9 @@ data class MoodleContentFileDto(
     val filename: String,
     val fileurl: String,
     val filesize: Int = 0
+)
+
+@Serializable
+data class MoodleDraftIdResponse(
+    val itemid: Int
 )

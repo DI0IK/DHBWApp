@@ -33,6 +33,10 @@ class MoodleRepository(
         return moodleDao.getContentForCourseFlow(courseId)
     }
 
+    fun getContentFlow(contentId: Int): Flow<CachedMoodleContent?> {
+        return moodleDao.getContentFlow(contentId)
+    }
+
     suspend fun syncMoodle(siteUrl: String, token: String, userId: Int) {
         val remoteCourses = moodleClient.getCourses(siteUrl, token, userId)
         val cachedCourses = remoteCourses.map {
@@ -75,7 +79,7 @@ class MoodleRepository(
                     try {
                         val sections = moodleClient.getCourseContents(siteUrl, token, course.id)
                         sections.flatMap { section ->
-                            section.modules?.filter { it.modname in listOf("resource", "url", "folder", "page", "assign") }
+                            section.modules?.filter { it.modname in listOf("resource", "url", "folder", "page", "assign", "label", "forum", "quiz", "choice", "feedback", "bigbluebuttonbn", "stealth") }
                                 ?.map { module ->
                                     val file = module.contents?.firstOrNull()
                                     val downloadUrl = when (module.modname) {
@@ -91,7 +95,8 @@ class MoodleRepository(
                                         type = module.modname,
                                         url = downloadUrl,
                                         fileSize = file?.filesize ?: 0,
-                                        instanceId = module.instance
+                                        instanceId = module.instance,
+                                        description = module.description
                                     )
                                 } ?: emptyList()
                         }
@@ -147,8 +152,7 @@ class MoodleRepository(
         withContext(Dispatchers.IO) {
             moodleDao.refreshCourses(cachedCourses)
             moodleDao.refreshAssignments(assignmentsWithStatus)
-            moodleDao.deleteContents()
-            moodleDao.insertContents(allCachedContents)
+            moodleDao.refreshContents(allCachedContents)
         }
     }
 
@@ -188,5 +192,18 @@ class MoodleRepository(
         assignmentId: Int
     ) {
         moodleClient.submitForGrading(siteUrl, token, assignmentId)
+    }
+
+    suspend fun getUnusedDraftItemId(
+        siteUrl: String,
+        token: String
+    ): Int {
+        return moodleClient.getUnusedDraftItemId(siteUrl, token)
+    }
+
+    suspend fun getAutoLoginUrl(siteUrl: String, token: String, privateToken: String, userId: Int, targetUrl: String): String {
+        val autologinDto = moodleClient.getAutoLoginKey(siteUrl, token, privateToken)
+        val encodedUrl = java.net.URLEncoder.encode(targetUrl, "UTF-8")
+        return "${autologinDto.autologinurl}?key=${autologinDto.key}&userid=$userId&urltogo=$encodedUrl"
     }
 }
