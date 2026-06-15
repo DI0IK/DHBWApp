@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <cache-path name="moodle_cache" path="moodle_files/" />
+    <cache-path name="nextcloud_cache" path="nextcloud_files/" />
 </paths>

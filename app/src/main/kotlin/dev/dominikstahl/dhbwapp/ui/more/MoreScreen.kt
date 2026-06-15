@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Assignment
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.FactCheck
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.LocalParking
@@ -39,6 +40,7 @@ fun MoreScreen(
     onDirectoryClick: () -> Unit,
     onDualisClick: () -> Unit,
     onMoodleClick: () -> Unit,
+    onNextcloudClick: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text(
@@ -52,6 +54,13 @@ fun MoreScreen(
             title = "Dualis",
             description = "Noten und Studienergebnisse abrufen",
             onClick = onDualisClick,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        MoreItem(
+            icon = Icons.Default.Cloud,
+            title = "Nextcloud",
+            description = "Dateien durchsuchen und anzeigen",
+            onClick = onNextcloudClick,
         )
         Spacer(modifier = Modifier.height(8.dp))
         MoreItem(

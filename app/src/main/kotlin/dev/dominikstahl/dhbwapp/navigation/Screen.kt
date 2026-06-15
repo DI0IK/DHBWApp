@@ -16,4 +16,6 @@ sealed class Screen(val route: String) {
     data object MoodleLogin : Screen("moodle_login")
     data object MoodleCourseDetail : Screen("moodle_course_detail/{courseId}")
     data object MoodleMaterial : Screen("moodle_material/{contentId}?url={url}&title={title}&type={type}")
+    data object Nextcloud : Screen("nextcloud")
+    data object NextcloudViewer : Screen("nextcloud_viewer?path={path}&name={name}")
 }

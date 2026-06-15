@@ -15,9 +15,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
@@ -51,7 +53,15 @@ import dev.dominikstahl.dhbwapp.ui.moodle.MoodleLoginScreen
 import dev.dominikstahl.dhbwapp.ui.moodle.MoodleCourseDetailScreen
 import dev.dominikstahl.dhbwapp.ui.moodle.MoodleViewModel
 import dev.dominikstahl.dhbwapp.ui.moodle.MoodleMaterialScreen
+import dev.dominikstahl.dhbwapp.data.local.NextcloudSessionManager
+import dev.dominikstahl.dhbwapp.data.remote.NextcloudClient as NextcloudClientRemote
+import dev.dominikstahl.dhbwapp.data.repository.NextcloudRepository
+import dev.dominikstahl.dhbwapp.ui.nextcloud.NextcloudBrowserScreen
+import dev.dominikstahl.dhbwapp.ui.nextcloud.NextcloudLoginScreen
+import dev.dominikstahl.dhbwapp.ui.nextcloud.NextcloudViewerScreen
+import dev.dominikstahl.dhbwapp.ui.nextcloud.NextcloudViewModel
 import io.ktor.client.HttpClient
+import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.launch
 
 @Composable
@@ -73,6 +83,10 @@ fun DhbwApp(httpClient: HttpClient, userPreferences: UserPreferences) {
     val moodleClient = remember { MoodleClient(httpClient) }
     val moodleSessionManager = remember { MoodleSessionManager(context) }
     val moodleRepository = remember { MoodleRepository(moodleClient, database.moodleDao()) }
+    val nextcloudHttpClient = remember { HttpClient(OkHttp) { engine { config { followRedirects(true) } } } }
+    val nextcloudClient = remember { NextcloudClientRemote(nextcloudHttpClient) }
+    val nextcloudSessionManager = remember { NextcloudSessionManager(context) }
+    val nextcloudRepository = remember { NextcloudRepository(nextcloudClient, nextcloudSessionManager, database.nextcloudDao()) }
     val scope = rememberCoroutineScope()
 
     val mainRoutes = listOf(Screen.Dashboard.route, Screen.Mensa.route, Screen.Lectures.route, Screen.More.route)
@@ -86,9 +100,11 @@ fun DhbwApp(httpClient: HttpClient, userPreferences: UserPreferences) {
         Screen.Moodle.route,
         Screen.MoodleLogin.route,
         Screen.MoodleCourseDetail.route,
-        Screen.MoodleMaterial.route
+        Screen.MoodleMaterial.route,
+        Screen.Nextcloud.route,
+        Screen.NextcloudViewer.route
     )
-    val showBottomBar = selectedSite != null && currentRoute in mainRoutes + detailRoutes && currentRoute != Screen.MoodleMaterial.route
+    val showBottomBar = selectedSite != null && currentRoute in mainRoutes + detailRoutes && currentRoute != Screen.MoodleMaterial.route && currentRoute != Screen.NextcloudViewer.route
 
     DhbwAppTheme {
         Scaffold(
@@ -128,7 +144,8 @@ fun DhbwApp(httpClient: HttpClient, userPreferences: UserPreferences) {
                         .then(
                             if (currentRoute == Screen.MoodleMaterial.route || 
                                 currentRoute == Screen.Moodle.route || 
-                                currentRoute == Screen.MoodleCourseDetail.route) {
+                                currentRoute == Screen.MoodleCourseDetail.route ||
+                                currentRoute == Screen.NextcloudViewer.route) {
                                 Modifier.fillMaxWidth()
                             } else {
                                 Modifier.widthIn(max = 800.dp)
@@ -205,6 +222,9 @@ fun DhbwApp(httpClient: HttpClient, userPreferences: UserPreferences) {
                         },
                         onMoodleClick = {
                             navController.navigate(Screen.Moodle.route)
+                        },
+                        onNextcloudClick = {
+                            navController.navigate(Screen.Nextcloud.route)
                         }
                     )
                 }
@@ -358,6 +378,74 @@ fun DhbwApp(httpClient: HttpClient, userPreferences: UserPreferences) {
                         onEntityClick = { type, name ->
                             navController.navigate("entity_timetable/$type/$name")
                         }
+                    )
+                }
+                composable(Screen.Nextcloud.route) {
+                    val nextcloudViewModel: NextcloudViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+                        factory = NextcloudViewModel.Factory(nextcloudRepository, context, nextcloudClient)
+                    )
+                    val ncState by nextcloudViewModel.uiState.collectAsState()
+
+                    if (ncState.isInitializing) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
+                        }
+                    } else if (!ncState.isLoggedIn) {
+                        NextcloudLoginScreen(
+                            viewModel = nextcloudViewModel,
+                            onBackClick = { navController.popBackStack() },
+                            onLoginSuccess = {
+                                navController.navigate(Screen.Nextcloud.route) {
+                                    popUpTo(Screen.Nextcloud.route) { inclusive = true }
+                                }
+                            }
+                        )
+                    } else {
+                        val fileToView = remember { mutableStateOf<dev.dominikstahl.dhbwapp.data.remote.NextcloudFile?>(null) }
+
+                        if (fileToView.value != null) {
+                            navController.navigate("nextcloud_viewer?path=${java.net.URLEncoder.encode(fileToView.value!!.path, "UTF-8")}&name=${java.net.URLEncoder.encode(fileToView.value!!.name, "UTF-8")}") {
+                                launchSingleTop = true
+                            }
+                            fileToView.value = null
+                        }
+
+                        NextcloudBrowserScreen(
+                            viewModel = nextcloudViewModel,
+                            onBackClick = { navController.popBackStack() },
+                            onFileClick = { file ->
+                                fileToView.value = file
+                            },
+                            onLogout = {
+                                nextcloudViewModel.logout()
+                            }
+                        )
+                    }
+                }
+                composable(
+                    route = "nextcloud_viewer?path={path}&name={name}",
+                    arguments = listOf(
+                        androidx.navigation.navArgument("path") { type = androidx.navigation.NavType.StringType },
+                        androidx.navigation.navArgument("name") { type = androidx.navigation.NavType.StringType }
+                    )
+                ) { backStackEntry ->
+                    val path = java.net.URLDecoder.decode(backStackEntry.arguments?.getString("path") ?: "", "UTF-8")
+                    val name = java.net.URLDecoder.decode(backStackEntry.arguments?.getString("name") ?: "", "UTF-8")
+                    val nextcloudViewModel: NextcloudViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+                        factory = NextcloudViewModel.Factory(nextcloudRepository, context, nextcloudClient)
+                    )
+                    val ncFile = dev.dominikstahl.dhbwapp.data.remote.NextcloudFile(
+                        path = path,
+                        name = name,
+                        isDirectory = false,
+                        size = 0,
+                        lastModified = null,
+                        contentType = null
+                    )
+                    NextcloudViewerScreen(
+                        file = ncFile,
+                        viewModel = nextcloudViewModel,
+                        onBackClick = { navController.popBackStack() }
                     )
                 }
                 composable(Screen.EntityTimetable.route) { backStackEntry ->

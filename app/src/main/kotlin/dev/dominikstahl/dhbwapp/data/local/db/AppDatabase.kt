@@ -12,9 +12,10 @@ import androidx.room.TypeConverters
         CachedMensaMenuDay::class,
         CachedMoodleCourse::class,
         CachedMoodleAssignment::class,
-        CachedMoodleContent::class
+        CachedMoodleContent::class,
+        CachedNextcloudFile::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 @TypeConverters(DbConverters::class)
@@ -23,6 +24,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun lectureDao(): LectureDao
     abstract fun mensaDao(): MensaDao
     abstract fun moodleDao(): MoodleDao
+    abstract fun nextcloudDao(): NextcloudDao
 
     companion object {
         @Volatile
